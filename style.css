@@ -1,0 +1,174 @@
+body { 
+    font-family: 'Inter', sans-serif; 
+    background-color: #0f172a; 
+    color: #e2e8f0; 
+}
+
+#app-background {
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    z-index: -1;
+    background-image: url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop');
+    background-size: cover; 
+    background-position: center; 
+    filter: brightness(0.4) contrast(1.2);
+    animation: ken-burns 40s ease-in-out infinite alternate;
+}
+
+@keyframes ken-burns { 
+    0% { transform: scale(1.1) translate(0, 0); } 
+    100% { transform: scale(1) translate(2%, -2%); } 
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.3); border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: rgba(245, 158, 11, 0.7); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(217, 119, 6, 0.8); }
+
+/* Glassmorphism System */
+.glass-container { 
+    position: relative; 
+    overflow: hidden; 
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4); 
+    transition: transform 0.3s ease, box-shadow 0.3s ease; 
+}
+
+.glass-filter { 
+    position: absolute; 
+    inset: 0; 
+    z-index: 1; 
+    pointer-events: none; 
+    backdrop-filter: blur(16px) saturate(180%); 
+    -webkit-backdrop-filter: blur(16px) saturate(180%); 
+    filter: url(#glass-distortion); 
+}
+
+.glass-overlay { 
+    position: absolute; 
+    inset: 0; 
+    z-index: 2; 
+    pointer-events: none; 
+    background: var(--bg-color, rgba(15, 23, 42, 0.7)); 
+    border: 1px solid rgba(255, 255, 255, 0.05); 
+}
+
+.glass-specular { 
+    position: absolute; 
+    inset: 0; 
+    z-index: 3; 
+    pointer-events: none; 
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1); 
+    background: radial-gradient(circle at 50% 50%, transparent 50%, transparent 100%); 
+    transition: background 0.5s ease; 
+}
+
+.glass-content { 
+    position: relative; 
+    z-index: 4; 
+    height: 100%; 
+    width: 100%; 
+}
+
+/* Glass Buttons */
+.glass-button {
+    --bg-color: rgba(245, 158, 11, 0.5); 
+    position: relative; 
+    border: none; 
+    cursor: pointer; 
+    overflow: hidden;
+    background: transparent; 
+    outline: none; 
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); 
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.glass-button:hover:not(:disabled) { 
+    transform: translateY(-2px); 
+    box-shadow: 0 6px 20px rgba(245, 158, 11, 0.2); 
+}
+
+.glass-button:active:not(:disabled) { 
+    transform: translateY(0); 
+}
+
+.glass-button:disabled { 
+    cursor: not-allowed; 
+    filter: grayscale(50%); 
+    opacity: 0.6; 
+}
+
+.glass-button .glass-content { 
+    font-weight: 600; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    gap: 0.5rem; 
+}
+
+.button-spinner { display: none; }
+
+/* Inputs */
+.glass-input { 
+    background: rgba(0, 0, 0, 0.4); 
+    border: 1px solid rgba(245, 158, 11, 0.3); 
+    backdrop-filter: blur(4px); 
+    color: white; 
+    transition: all 0.2s; 
+}
+
+.glass-input:focus { 
+    background: rgba(0, 0, 0, 0.6); 
+    border-color: #f59e0b; 
+    outline: none; 
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.3); 
+}
+
+.glass-input option { 
+    background-color: #0f172a; 
+    color: white; 
+}
+
+/* Page Navigation */
+.content-page { display: none; animation: fadeIn 0.4s ease-out; }
+.content-page.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.nav-link.active { background-color: rgba(245, 158, 11, 0.2) !important; border-left: 4px solid #f59e0b; color: #ffffff; }
+.nav-link.active .nav-icon { color: #fbbf24; }
+
+/* Spinners */
+.spinner { width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.2); border-bottom-color: #f59e0b; border-radius: 50%; display: inline-block; animation: rotation 1s linear infinite; }
+.spinner-lg { width: 40px; height: 40px; border-width: 4px; }
+@keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* Estilos Extras (Animes / Carrossel) */
+.episode-url.missing-link, #edit-movie-url.missing-link, #movie-url.missing-link { border-color: rgba(239, 68, 68, 0.5); background-color: rgba(239, 68, 68, 0.05); }
+.episode-row.filled { opacity: 0.7; border-left: 3px solid #10b981; }
+.season-group.hide-filled .episode-row.filled { display: none; }
+.episode-row.marked-for-split { outline: 2px dashed #f59e0b; outline-offset: -2px; background-color: rgba(245, 158, 11, 0.1); }
+.episode-select { margin-top: 0.3rem; }
+
+.catalog-check:checked + div { border-color: #f59e0b; background-color: rgba(245, 158, 11, 0.2); }
+.catalog-check:checked + div .check-icon { display: block; }
+
+.image-selector-img { cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; border: 2px solid transparent; }
+.image-selector-img:hover { transform: scale(1.05); box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4); border-color: #f59e0b; }
+
+/* Estilos Avatares (com Botão de Editar) */
+.avatar-preview-container { position: relative; cursor: pointer; }
+.avatar-preview-container:hover .avatar-remove-btn, .avatar-preview-container:hover .avatar-edit-btn { display: flex; }
+.avatar-remove-btn { display: none; position: absolute; top: -5px; right: -5px; background: rgba(239, 68, 68, 0.9); border-radius: 50%; width: 24px; height: 24px; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px; z-index: 10; }
+.avatar-edit-btn { display: none; position: absolute; top: -5px; right: 25px; background: rgba(99, 102, 241, 0.9); border-radius: 50%; width: 24px; height: 24px; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 10px; z-index: 10; }
+
+/* Estilos Fundos Horizontais e Verticais */
+.bg-preview-container, .vertical-preview-container { position: relative; cursor: pointer; }
+.bg-preview-container:hover .bg-remove-btn, .vertical-preview-container:hover .vertical-remove-btn { display: flex; }
+.bg-remove-btn, .vertical-remove-btn { display: none; position: absolute; top: -5px; right: -5px; background: rgba(239, 68, 68, 0.9); border-radius: 50%; width: 24px; height: 24px; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px; }
+
+/* Switch Toggle (Auto-Colar) */
+input:checked ~ .dot { transform: translateX(100%); }
+input:checked ~ .switch-bg { background-color: rgba(16, 185, 129, 0.5); border-color: #10b981; }

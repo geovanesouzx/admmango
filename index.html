@@ -1,0 +1,1229 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mango Studio - Painel de Controle</title>
+    
+    <!-- Tailwind CSS (via CDN para facilitar) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Fontes do Google -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    
+    <!-- Cropper.js CSS e JS (Para recorte de Avatares) -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    
+    <!-- Seu Arquivo CSS Separado -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="antialiased">
+
+    <!-- Fundo Animado e Filtro SVG para Efeito de Vidro -->
+    <div id="app-background"></div>
+    <svg style="display: none">
+        <filter id="glass-distortion">
+            <feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves="3" seed="1" result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="10" />
+        </filter>
+    </svg>
+
+    <div class="flex h-screen opacity-0 transition-opacity duration-500" id="main-app-container">
+
+        <!-- ================= SIDEBAR ================= -->
+        <aside id="sidebar-nav" class="glass-container m-4 rounded-2xl hidden md:flex flex-col flex-shrink-0 w-64 z-20" style="--bg-color: rgba(15, 23, 42, 0.75);">
+            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+            <div class="glass-content flex flex-col h-full">
+                <div class="h-24 flex-shrink-0 flex items-center gap-3 px-6 border-b border-amber-500/10">
+                    <div class="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-600 rounded-lg flex items-center justify-center text-xl shadow-lg shadow-orange-500/30">🥭</div>
+                    <div>
+                        <h1 class="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">Mango</h1>
+                        <p class="text-xs text-slate-400 font-semibold tracking-widest uppercase">Studio Admin</p>
+                    </div>
+                </div>
+                
+                <nav class="flex-1 flex flex-col gap-1 p-4 overflow-y-auto mt-2">
+                    <a href="#" class="nav-link active flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="addContent">
+                        <svg class="nav-icon h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                        <span class="font-medium">Adicionar Anime</span>
+                    </a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="manageContent">
+                        <svg class="nav-icon h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                        <span class="font-medium">Catálogo</span>
+                    </a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="badgeManagerPage">
+                        <svg class="nav-icon h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+                        <span class="font-medium">Gerenciar Selos</span>
+                    </a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="requestsPage">
+                        <svg class="nav-icon h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+                        <span class="font-medium">Pedidos <span id="pending-requests-badge" class="ml-2 bg-amber-500 text-black text-[10px] px-2 py-0.5 rounded-full hidden">0</span></span>
+                    </a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="radarPage">
+                        <svg class="nav-icon h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                        <span class="font-medium">Radar de Episódios</span>
+                    </a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="notificationsPage">
+                        <svg class="nav-icon h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                        <span class="font-medium">Notificações</span>
+                    </a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="verifyPage">
+                        <svg class="nav-icon h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span class="font-medium">Selo de Verificado</span>
+                    </a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="carouselPage">
+                        <svg class="nav-icon h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/></svg>
+                        <span class="font-medium">Carrosséis (IA)</span>
+                    </a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="avatarPage">
+                        <svg class="nav-icon h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span class="font-medium">Avatares de Perfil</span>
+                    </a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="backgroundPage">
+                        <svg class="nav-icon h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        <span class="font-medium">Fundos de Perfil</span>
+                    </a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="verticalBgPage">
+                        <svg class="nav-icon h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                        <span class="font-medium">Fundos (Quem Assiste)</span>
+                    </a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="updatePage">
+                        <svg class="nav-icon h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                        <span class="font-medium">Atualização do App</span>
+                    </a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="bulkUpdatePage">
+                        <svg class="nav-icon h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        <span class="font-medium">Att. Classificações</span>
+                    </a>
+                    <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="achievementsPage">
+                        <svg class="nav-icon h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                        <span class="font-medium">Conquistas</span>
+                    </a>
+                </nav>
+                
+                <div class="p-4 border-t border-amber-500/10">
+                    <button id="logout-btn" class="w-full text-slate-400 hover:text-red-400 flex items-center justify-center gap-2 py-2 transition-colors">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg> Sair
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ================= MAIN CONTENT AREA ================= -->
+        <main class="flex-1 overflow-x-hidden overflow-y-auto p-4 md:pt-4 relative">
+            <div class="container mx-auto max-w-7xl h-full">
+
+                <!-- 0. TELA DE NOTIFICAÇÕES -->
+                <div id="notificationsPage" class="content-page space-y-6">
+                    <div class="flex items-center gap-3 px-2 mb-6">
+                        <div class="p-2 bg-sky-500/20 rounded-lg text-sky-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg></div>
+                        <h1 class="text-3xl font-bold text-white">Centro de Notificações</h1>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="glass-container rounded-2xl border border-sky-500/20" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content p-6 md:p-8 space-y-6">
+                                <h3 class="text-xl font-bold text-white mb-2">Enviar Notificação Global</h3>
+                                <p class="text-sm text-slate-400">Esta mensagem aparecerá como um pop-up na tela inicial para todos os usuários e como Push Notification no celular.</p>
+                                
+                                <form id="global-notif-form" class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-bold text-sky-400 mb-2">Título do Aviso</label>
+                                        <input type="text" id="notif-title" class="w-full p-3 glass-input rounded-xl text-white font-bold" placeholder="Ex: Novidade no App!" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-bold text-sky-400 mb-2">Mensagem</label>
+                                        <textarea id="notif-body" rows="4" class="w-full p-3 glass-input rounded-xl text-white resize-none" placeholder="Ex: Acabamos de adicionar novos animes! Vá conferir." required></textarea>
+                                    </div>
+                                    <button type="submit" id="send-global-notif-btn" class="glass-button w-full rounded-xl py-3 mt-4" style="--bg-color: rgba(14, 165, 233, 0.7);">
+                                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                        <div class="glass-content text-white"><span class="button-text font-bold">Disparar Notificação</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="glass-container rounded-2xl border border-slate-700" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content p-6 md:p-8 space-y-6">
+                                <h3 class="text-xl font-bold text-white mb-2">Configuração de Push (Webhook)</h3>
+                                <div class="bg-black/30 border border-slate-700 p-4 rounded-xl">
+                                    <p class="text-slate-300 text-sm">Para enviar notificações na barra do telemóvel, este painel conecta-se a um Webhook (Make.com, n8n ou Google Apps Script).</p>
+                                </div>
+                                
+                                <form id="webhook-form" class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-bold text-slate-400 mb-2">URL do Webhook Receptor</label>
+                                        <input type="url" id="notif-webhook-url" class="w-full p-3 glass-input rounded-xl text-white text-sm" placeholder="https://hook.make.com/...">
+                                    </div>
+                                    <button type="submit" id="save-webhook-btn" class="glass-button w-full rounded-xl py-3 mt-2" style="--bg-color: rgba(100, 116, 139, 0.7);">
+                                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                        <div class="glass-content text-white"><span class="button-text font-bold">Salvar Webhook</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 1. TELA: ADICIONAR CONTEÚDO -->
+                <div id="addContent" class="content-page active space-y-6">
+                    <div class="flex items-center gap-3 px-2 mb-6">
+                        <div class="p-2 bg-amber-500/20 rounded-lg text-amber-500"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg></div>
+                        <h1 class="text-3xl font-bold text-white">Adicionar Novo Anime/Filme</h1>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-1 space-y-6">
+                            <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                                <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                <div class="glass-content p-6">
+                                    <h3 class="text-xl font-semibold text-white mb-4">Buscar no TMDB</h3>
+                                    <div class="flex flex-col gap-4">
+                                        <input type="text" id="search-query" placeholder="Nome do anime..." class="w-full p-3 glass-input rounded-lg text-white">
+                                        <button id="search-tmdb-btn" class="glass-button w-full rounded-lg py-3" style="--bg-color: rgba(245, 158, 11, 0.7);">
+                                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                            <div class="glass-content"><span class="button-text">Buscar Anime</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                        </button>
+                                    </div>
+                                    <div id="search-results" class="mt-6 space-y-3 max-h-[50vh] overflow-y-auto pr-2"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="details-form-container" class="lg:col-span-2 hidden glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content p-6 md:p-8 space-y-6">
+                                <h3 class="text-xl font-semibold text-white mb-2">Configurar Informações e Links</h3>
+                                
+                                <div id="tmdb-details" class="flex flex-col md:flex-row gap-6 border-b border-amber-500/20 pb-6"></div>
+                                
+                                <form id="content-form" class="space-y-6">
+                                    <input type="hidden" id="tmdb-id">
+                                    <input type="hidden" id="media-type">
+                                    
+                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                        <div class="md:col-span-3">
+                                            <label class="block text-sm font-bold text-amber-500 mb-2">Título da Obra (Editável)</label>
+                                            <input type="text" id="add-main-title" class="w-full p-4 glass-input rounded-xl text-lg font-bold text-white" required>
+                                        </div>
+                                        <div class="md:col-span-1">
+                                            <label class="block text-sm font-bold text-amber-500 mb-2">Classificação</label>
+                                            <select id="add-age-rating" class="w-full p-4 glass-input rounded-xl text-lg font-bold text-white cursor-pointer" required>
+                                                <option value="L">Livre (L)</option>
+                                                <option value="10">10 Anos</option>
+                                                <option value="12">12 Anos</option>
+                                                <option value="14" selected>14 Anos</option>
+                                                <option value="16">16 Anos</option>
+                                                <option value="18">18 Anos</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                                        <div class="md:col-span-2">
+                                            <label class="block text-sm font-bold text-amber-500 mb-2">Selo (Estilo Netflix)</label>
+                                            <select id="add-badge-text" class="w-full p-4 glass-input rounded-xl text-lg font-bold text-white cursor-pointer">
+                                                <option value="">Nenhum Selo</option>
+                                                <option value="Novidade">Novidade</option>
+                                                <option value="Nova Temporada">Nova Temporada</option>
+                                                <option value="Nova temporada | em breve">Nova temporada + em breve (Duplo)</option>
+                                                <option value="Novo Episódio">Novo Episódio</option>
+                                                <option value="Novo episódio | Assista já">Novo episódio + Assista já (Duplo)</option>
+                                                <option value="Em Breve">Em Breve</option>
+                                                <option value="Indisponível em breve">Indisponível em breve</option>
+                                                <option value="Últimos Dias">Últimos Dias</option>
+                                                <option value="Top 10">Top 10</option>
+                                            </select>
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <label class="block text-sm font-bold text-amber-500 mb-2">Válido até (Opcional)</label>
+                                            <input type="date" id="add-badge-expiration" class="w-full p-4 glass-input rounded-xl text-lg font-bold text-white" title="Deixe em branco para durar para sempre">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-black/30 p-5 rounded-xl border border-slate-700">
+                                        <div>
+                                            <label class="block text-sm font-bold text-amber-500 mb-2">Capa Principal (Poster)</label>
+                                            <div class="flex gap-2">
+                                                <input type="url" id="custom-poster" class="flex-1 p-3 glass-input rounded-lg text-sm" placeholder="URL da Capa...">
+                                                <button type="button" onclick="openTmdbImages('add')" class="glass-button rounded-lg px-4" style="--bg-color: rgba(59, 130, 246, 0.6);">
+                                                    <div class="glass-content text-white text-sm">Ver TMDB</div>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-bold text-amber-500 mb-2">Imagem de Fundo (Backdrop)</label>
+                                            <div class="flex gap-2">
+                                                <input type="url" id="custom-backdrop" class="flex-1 p-3 glass-input rounded-lg text-sm" placeholder="URL do Fundo...">
+                                                <button type="button" onclick="openTmdbImages('add')" class="glass-button rounded-lg px-4" style="--bg-color: rgba(59, 130, 246, 0.6);">
+                                                    <div class="glass-content text-white text-sm">Ver TMDB</div>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="url-container"></div>
+
+                                    <div id="seasons-episodes-container">
+                                        <div id="add-global-toolbar" class="hidden justify-end mb-4 p-4 bg-amber-900/20 border border-amber-500/30 rounded-xl items-center gap-4 flex-wrap">
+                                            <div class="text-amber-200 text-sm font-bold mr-auto">Ferramentas de Atualização:</div>
+                                            <button type="button" onclick="syncTmdbEpisodes('seasons-list', 'tmdb-id')" class="glass-button rounded-lg py-2 px-4 text-sm font-bold" style="--bg-color: rgba(59, 130, 246, 0.8);">
+                                                <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                                <div class="glass-content flex items-center gap-2 text-white">
+                                                    <span>🔄 Atualizar Novos Episódios</span>
+                                                </div>
+                                            </button>
+                                        </div>
+
+                                        <div id="seasons-selector-area" class="hidden flex-col gap-3 mb-4 bg-black/30 p-5 rounded-xl border border-slate-700">
+                                            <span class="text-sm font-bold text-amber-500 flex items-center gap-2">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                                                Selecione as Temporadas para Adicionar:
+                                            </span>
+                                            <div id="season-pills-container" class="flex flex-wrap gap-3"></div>
+                                        </div>
+                                        <div id="seasons-list" class="space-y-6"></div>
+                                    </div>
+                                    
+                                    <div class="pt-4 border-t border-amber-500/20">
+                                        <label class="flex items-center gap-3 mb-4 cursor-pointer">
+                                            <input type="checkbox" id="notify-add" class="w-5 h-5 text-amber-500 rounded border-gray-500 bg-transparent focus:ring-amber-500" checked>
+                                            <span class="text-sm font-bold text-sky-400">🔔 Enviar notificação de Lançamento (Para todos os usuários)</span>
+                                        </label>
+                                        <button type="submit" id="save-btn" class="glass-button w-full rounded-xl py-4 text-lg" style="--bg-color: rgba(16, 185, 129, 0.7);">
+                                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                            <div class="glass-content text-white"><span class="button-text">Salvar no Mango</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. TELA: MANAGE CONTENT (CATÁLOGO) -->
+                <div id="manageContent" class="content-page space-y-6">
+                    <div class="flex items-center gap-3 px-2 mb-6">
+                        <div class="p-2 bg-blue-500/20 rounded-lg text-blue-500"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg></div>
+                        <h1 class="text-3xl font-bold text-white">Catálogo Mango</h1>
+                    </div>
+
+                    <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                        <div class="glass-content p-6">
+                            <input type="text" id="catalog-search" placeholder="Pesquisar animes salvos..." class="w-full p-4 glass-input rounded-xl mb-6 text-lg">
+                            <div id="catalog-list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[65vh] overflow-y-auto pr-2 pb-4">
+                                <div class="col-span-full spinner-lg mx-auto"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- NOVA ABA: GERENCIADOR DE SELOS RÁPIDO -->
+                <div id="badgeManagerPage" class="content-page space-y-6">
+                    <div class="flex items-center gap-3 px-2 mb-6">
+                        <div class="p-2 bg-amber-500/20 rounded-lg text-amber-500">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+                        </div>
+                        <h1 class="text-3xl font-bold text-white">Gerenciador de Selos Rápido</h1>
+                    </div>
+
+                    <div class="flex flex-col lg:flex-row gap-6 h-[75vh]">
+                        <div class="glass-container rounded-2xl flex-1 flex flex-col h-full" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content flex flex-col h-full">
+                                <div class="p-4 border-b border-slate-700/50">
+                                    <input type="text" id="bm-search" class="w-full p-3 glass-input rounded-xl text-sm" placeholder="Pesquisar anime ou série...">
+                                </div>
+                                <div id="bm-list" class="flex-1 overflow-y-auto p-4 space-y-2">
+                                    <div class="text-center py-10"><div class="spinner border-slate-900 border-b-white"></div></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="glass-container rounded-2xl w-full lg:w-96 flex flex-col" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content flex flex-col h-full">
+                                <div class="p-6 border-b border-slate-700/50">
+                                    <h2 class="text-xl font-bold text-amber-400">Editor de Selo</h2>
+                                </div>
+                                
+                                <div id="bm-editor-empty" class="p-8 text-center text-slate-400 m-auto">
+                                    <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path></svg>
+                                    <p class="text-sm">Selecione um item na lista ao lado para começar.</p>
+                                </div>
+
+                                <form id="bm-form" class="p-6 space-y-6 hidden overflow-y-auto">
+                                    <input type="hidden" id="bm-id">
+                                    
+                                    <div class="flex items-center gap-4 bg-black/40 p-3 rounded-xl border border-slate-700/50">
+                                        <img id="bm-poster" src="" class="w-12 h-16 object-cover rounded shadow-lg">
+                                        <div class="min-w-0 flex-1">
+                                            <h3 id="bm-title" class="font-bold text-white truncate"></h3>
+                                            <p id="bm-type" class="text-xs text-slate-400"></p>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-bold text-amber-500 mb-2">Qual selo deseja exibir?</label>
+                                        <select id="bm-badge-text" class="w-full p-3 glass-input rounded-xl text-sm font-bold cursor-pointer">
+                                            <option value="">Nenhum Selo (Limpar)</option>
+                                            <option value="Novidade">Novidade</option>
+                                            <option value="Nova Temporada">Nova Temporada</option>
+                                            <option value="Nova temporada | em breve">Nova temporada + em breve (Duplo)</option>
+                                            <option value="Novo Episódio">Novo Episódio</option>
+                                            <option value="Novo episódio | Assista já">Novo episódio + Assista já (Duplo)</option>
+                                            <option value="Em Breve">Em Breve</option>
+                                            <option value="Indisponível em breve">Indisponível em breve</option>
+                                            <option value="Últimos Dias">Últimos Dias</option>
+                                            <option value="Top 10">Top 10</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-bold text-amber-500 mb-2">Ocultar automaticamente em:</label>
+                                        <input type="date" id="bm-badge-expiration" class="w-full p-3 glass-input rounded-xl text-sm" title="Deixe em branco para o selo ficar ativo para sempre.">
+                                        <p class="text-[10px] text-slate-400 mt-1">Deixe em branco para durar para sempre.</p>
+                                    </div>
+
+                                    <button type="submit" id="bm-save-btn" class="glass-button w-full rounded-xl py-3 mt-4" style="--bg-color: rgba(245, 158, 11, 0.8);">
+                                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                        <div class="glass-content text-slate-900"><span class="button-text font-bold">Salvar Selo Rápido</span><div class="button-spinner"><div class="spinner border-slate-900 border-b-white"></div></div></div>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2.5. TELA: PEDIDOS DOS USUÁRIOS -->
+                <div id="requestsPage" class="content-page space-y-6">
+                    <div class="flex items-center gap-3 px-2 mb-6">
+                        <div class="p-2 bg-amber-500/20 rounded-lg text-amber-500">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+                        </div>
+                        <h1 class="text-3xl font-bold text-white">Pedidos da Comunidade</h1>
+                    </div>
+
+                    <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                        <div class="glass-content p-6">
+                            <p class="text-sm text-slate-400 mb-6">Aqui você vê o que os usuários estão pedindo no app. Os pedidos pendentes com mais votos aparecem primeiro. Você pode buscar o pedido direto na tela de adicionar ou atualizar o status para o usuário ver.</p>
+                            
+                            <div id="requests-list" class="space-y-4 max-h-[70vh] overflow-y-auto pr-2 pb-4">
+                                <div class="spinner-lg mx-auto block mt-10"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TELA: RADAR DE ATUALIZAÇÕES -->
+                <div id="radarPage" class="content-page space-y-6">
+                    <div class="flex items-center gap-3 px-2 mb-6">
+                        <div class="p-2 bg-emerald-500/20 rounded-lg text-emerald-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg></div>
+                        <h1 class="text-3xl font-bold text-white">Radar de Lançamentos</h1>
+                    </div>
+
+                    <div class="glass-container rounded-2xl border border-emerald-500/20" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                        <div class="glass-content p-6 md:p-8">
+                            <div class="flex flex-col md:flex-row items-center justify-between gap-6 mb-6">
+                                <div>
+                                    <h3 class="text-xl font-bold text-white mb-2">Séries com Novos Episódios</h3>
+                                    <p class="text-sm text-slate-400">Clique no botão para escanear seu banco de dados. O sistema comparará a quantidade de episódios locais com a quantidade oficial no TMDB.</p>
+                                    <p id="radar-progress" class="text-emerald-400 font-bold mt-2 text-sm hidden"></p>
+                                </div>
+                                <button id="start-radar-btn" onclick="startUpdateScan()" class="glass-button flex-shrink-0 rounded-xl py-3 px-6" style="--bg-color: rgba(16, 185, 129, 0.8);">
+                                    <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                    <div class="glass-content text-white font-bold"><span class="button-text">📡 Escanear Catálogo</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                </button>
+                            </div>
+
+                            <div class="bg-black/30 rounded-xl p-4 min-h-[300px] border border-slate-700/50">
+                                <div id="radar-results-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[50vh] overflow-y-auto pr-2">
+                                    <div class="col-span-full flex flex-col items-center justify-center h-48 text-slate-500">
+                                        <svg class="w-12 h-12 mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                        <p>Clique em "Escanear Catálogo" para procurar atualizações.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2.8. TELA: SELO DE VERIFICADO -->
+                <div id="verifyPage" class="content-page space-y-6">
+                    <div class="flex items-center gap-3 px-2 mb-6">
+                        <div class="p-2 bg-blue-500/20 rounded-lg text-[#3897f0]">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                        </div>
+                        <h1 class="text-3xl font-bold text-white">Selo de Verificado</h1>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content p-6 md:p-8 space-y-6">
+                                <h3 class="text-xl font-bold text-white mb-2">Conceder ou Remover Verificação</h3>
+                                <p class="text-sm text-slate-400 mb-6">Digite o nome de usuário (com ou sem @) para encontrar o perfil e alterar o status do selo azul.</p>
+                                
+                                <div class="flex flex-col gap-4">
+                                    <input type="text" id="verify-username-search" placeholder="@nome_de_usuario" class="w-full p-4 glass-input rounded-xl text-lg text-white font-bold">
+                                    <button id="verify-search-btn" onclick="searchUserForVerification()" class="glass-button rounded-xl py-4 px-8 w-full" style="--bg-color: rgba(56, 151, 240, 0.8);">
+                                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                        <div class="glass-content text-white font-bold"><span class="button-text">Buscar Usuário</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                    </button>
+                                </div>
+
+                                <div id="verify-search-result" class="mt-8 min-h-[100px]"></div>
+                            </div>
+                        </div>
+
+                        <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content p-6 md:p-8 flex flex-col h-full">
+                                <div class="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
+                                    <h3 class="text-xl font-bold text-white">Usuários Verificados</h3>
+                                    <button onclick="loadVerifiedUsers()" class="text-sm text-[#3897f0] hover:text-blue-400 font-bold border border-blue-500/50 rounded-lg px-3 py-1 flex items-center gap-2">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Atualizar
+                                    </button>
+                                </div>
+                                <div id="verified-users-list" class="flex-1 overflow-y-auto space-y-3 pr-2">
+                                    <div class="spinner mx-auto block mt-4"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. TELA: EDIT CONTENT PAGE -->
+                <div id="editContentPage" class="content-page space-y-6">
+                    <div class="flex items-center justify-between px-2 mb-6">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 bg-purple-500/20 rounded-lg text-purple-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></div>
+                            <h1 id="edit-title-header" class="text-3xl font-bold text-white">Editando...</h1>
+                        </div>
+                        <button class="nav-link glass-button rounded-lg py-2 px-4 text-sm" data-page="manageContent" style="--bg-color: rgba(100, 116, 139, 0.5);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content">Voltar</div>
+                        </button>
+                    </div>
+
+                    <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                        <div class="glass-content p-6 md:p-8 space-y-6">
+                            <form id="edit-form" class="space-y-6">
+                                <input type="hidden" id="edit-doc-id">
+                                <input type="hidden" id="edit-tmdb-id">
+                                <input type="hidden" id="edit-media-type">
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div class="md:col-span-3">
+                                        <label class="block text-sm font-bold text-purple-400 mb-2">Título da Obra (Editável)</label>
+                                        <input type="text" id="edit-main-title" class="w-full p-4 glass-input rounded-xl text-lg font-bold text-white" required>
+                                    </div>
+                                    <div class="md:col-span-1">
+                                        <label class="block text-sm font-bold text-purple-400 mb-2">Classificação</label>
+                                        <select id="edit-age-rating" class="w-full p-4 glass-input rounded-xl text-lg font-bold text-white cursor-pointer" required>
+                                            <option value="L">Livre (L)</option>
+                                            <option value="10">10 Anos</option>
+                                            <option value="12">12 Anos</option>
+                                            <option value="14" selected>14 Anos</option>
+                                            <option value="16">16 Anos</option>
+                                            <option value="18">18 Anos</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                                    <div class="md:col-span-2">
+                                        <label class="block text-sm font-bold text-purple-400 mb-2">Selo (Estilo Netflix)</label>
+                                        <select id="edit-badge-text" class="w-full p-4 glass-input rounded-xl text-lg font-bold text-white cursor-pointer">
+                                            <option value="">Nenhum Selo</option>
+                                            <option value="Novidade">Novidade</option>
+                                            <option value="Nova Temporada">Nova Temporada</option>
+                                            <option value="Nova temporada | em breve">Nova temporada + em breve (Duplo)</option>
+                                            <option value="Novo Episódio">Novo Episódio</option>
+                                            <option value="Novo episódio | Assista já">Novo episódio + Assista já (Duplo)</option>
+                                            <option value="Em Breve">Em Breve</option>
+                                            <option value="Indisponível em breve">Indisponível em breve</option>
+                                            <option value="Últimos Dias">Últimos Dias</option>
+                                            <option value="Top 10">Top 10</option>
+                                        </select>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="block text-sm font-bold text-purple-400 mb-2">Válido até (Opcional)</label>
+                                        <input type="date" id="edit-badge-expiration" class="w-full p-4 glass-input rounded-xl text-lg font-bold text-white" title="Deixe em branco para durar para sempre">
+                                    </div>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-black/30 p-5 rounded-xl border border-slate-700">
+                                    <div>
+                                        <label class="block text-sm font-bold text-purple-400 mb-2">Capa Principal (Poster)</label>
+                                        <div class="flex gap-2">
+                                            <input type="url" id="edit-custom-poster" class="flex-1 p-3 glass-input rounded-lg text-sm" placeholder="URL da Capa...">
+                                            <button type="button" onclick="openTmdbImages('edit')" class="glass-button rounded-lg px-4" style="--bg-color: rgba(59, 130, 246, 0.6);">
+                                                <div class="glass-content text-white text-sm">Ver TMDB</div>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-bold text-purple-400 mb-2">Imagem de Fundo (Backdrop)</label>
+                                        <div class="flex gap-2">
+                                            <input type="url" id="edit-custom-backdrop" class="flex-1 p-3 glass-input rounded-lg text-sm" placeholder="URL do Fundo...">
+                                            <button type="button" onclick="openTmdbImages('edit')" class="glass-button rounded-lg px-4" style="--bg-color: rgba(59, 130, 246, 0.6);">
+                                                <div class="glass-content text-white text-sm">Ver TMDB</div>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="edit-url-container"></div>
+                                
+                                <div id="edit-seasons-episodes-container" class="space-y-4 pt-4">
+                                    <div id="global-renumber-toolbar" class="hidden justify-end mb-6 p-4 bg-amber-900/20 border border-amber-500/30 rounded-xl items-center gap-4 flex-wrap">
+                                        <div class="text-amber-200 text-sm font-bold mr-auto">Ferramentas de Atualização:</div>
+                                        
+                                        <button type="button" onclick="syncTmdbEpisodes('edit-seasons-list', 'edit-tmdb-id')" class="glass-button rounded-lg py-2 px-4 text-sm font-bold" style="--bg-color: rgba(59, 130, 246, 0.8);">
+                                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                            <div class="glass-content flex items-center gap-2 text-white">
+                                                <span>🔄 Atualizar Novos Episódios</span>
+                                            </div>
+                                        </button>
+
+                                        <button type="button" id="global-renumber-btn" class="glass-button rounded-lg py-2 px-4 text-sm font-bold" style="--bg-color: rgba(245, 158, 11, 0.8);">
+                                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                            <div class="glass-content flex items-center gap-2 text-slate-900">
+                                                <span>🔢 Renumerar Série (Absoluto)</span>
+                                            </div>
+                                        </button>
+                                    </div>
+                                    
+                                    <div id="edit-add-season-wrapper" class="hidden flex-col gap-3 mb-6 bg-black/30 p-4 rounded-xl border border-slate-700">
+                                        <span class="text-sm font-bold text-amber-500 flex items-center gap-2">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                                            Novas Temporadas Disponíveis no TMDB:
+                                        </span>
+                                        <div id="edit-season-pills" class="flex flex-wrap gap-3"></div>
+                                    </div>
+
+                                    <div id="edit-seasons-list" class="space-y-6"></div>
+                                </div>
+                                
+                                <div class="pt-4 border-t border-purple-500/20">
+                                    <label class="flex items-center gap-3 mb-4 cursor-pointer">
+                                        <input type="checkbox" id="notify-edit" class="w-5 h-5 text-sky-400 rounded border-gray-500 bg-transparent focus:ring-sky-500" checked>
+                                        <span class="text-sm font-bold text-sky-400">🔔 Enviar notificação de Novo Episódio (Para quem tem nos Favoritos)</span>
+                                    </label>
+                                    <button type="submit" id="edit-save-btn" class="glass-button w-full rounded-xl py-4 text-lg" style="--bg-color: rgba(16, 185, 129, 0.7);">
+                                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                        <div class="glass-content text-white"><span class="button-text">Salvar Alterações</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. TELA: CARROSSEIS E GERENCIAMENTO (COM IA) -->
+                <div id="carouselPage" class="content-page space-y-6">
+                    <div class="flex items-center gap-3 px-2 mb-6">
+                        <div class="p-2 bg-pink-500/20 rounded-lg text-pink-500"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"/></svg></div>
+                        <h1 class="text-3xl font-bold text-white">Carrosséis e Categorias</h1>
+                    </div>
+
+                    <div class="glass-container rounded-2xl mb-6" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                        <div class="glass-content p-6">
+                            <h3 class="text-lg font-bold text-white mb-2 flex items-center gap-2">📌 Carrosséis Fixos no App</h3>
+                            <p class="text-sm text-slate-400 mb-4">Estas três categorias sempre aparecerão no topo da tela Início do seu aplicativo (gerenciadas automaticamente pelo Android):</p>
+                            <div class="flex gap-3 flex-wrap">
+                                <span class="bg-slate-800 text-slate-200 px-4 py-2 rounded-lg text-sm font-bold border border-slate-600 shadow-inner">1. Lançamentos</span>
+                                <span class="bg-slate-800 text-slate-200 px-4 py-2 rounded-lg text-sm font-bold border border-slate-600 shadow-inner">2. Adicionados Recentemente</span>
+                                <span class="bg-slate-800 text-slate-200 px-4 py-2 rounded-lg text-sm font-bold border border-slate-600 shadow-inner">3. Destaques da Semana</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-1 space-y-6">
+                            
+                            <!-- Gerador IA -->
+                            <div class="glass-container rounded-2xl border border-pink-500/30" style="--bg-color: rgba(15, 23, 42, 0.8);">
+                                <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                <div class="glass-content p-5 space-y-4">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <span class="text-2xl">✨</span><h3 class="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-500">Inteligência Artificial</h3>
+                                    </div>
+                                    <p class="text-xs text-slate-400">A IA vai analisar seu banco e organizar os conteúdos automaticamente por Gêneros. Carrosséis gerados anteriormente por IA serão substituídos.</p>
+                                    
+                                    <div>
+                                        <input type="password" id="gemini-api-key" placeholder="API Key (Google AI Studio)" class="w-full p-2 glass-input rounded-lg text-sm text-slate-300">
+                                    </div>
+                                    <button id="generate-all-ai-btn" class="glass-button w-full rounded-lg py-3" style="--bg-color: rgba(236, 72, 153, 0.7);">
+                                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                        <div class="glass-content text-white"><span class="button-text text-sm">Criar Categorias com IA</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Lista de Carrosséis -->
+                            <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                                <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                <div class="glass-content p-5">
+                                    <h3 class="text-lg font-bold text-white mb-4 border-b border-slate-700 pb-2">Carrosséis Salvos</h3>
+                                    <div id="saved-carousels-list" class="space-y-3 max-h-64 overflow-y-auto pr-2">
+                                        <div class="spinner mx-auto block mt-4"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Editor Manual -->
+                        <div class="lg:col-span-2 glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content p-6 flex flex-col h-full">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-xl font-bold text-white">Editor de Carrossel</h3>
+                                    <button type="button" onclick="clearCarouselEdit()" class="text-sm text-amber-500 hover:text-amber-400 font-bold border border-amber-500/50 rounded-lg px-3 py-1">Limpar / Criar Novo</button>
+                                </div>
+                                
+                                <input type="hidden" id="carousel-edit-id">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-300 mb-1">Título do Carrossel</label>
+                                    <input type="text" id="carousel-title" placeholder="Ex: Animes de Comédia Romântica" class="w-full p-3 glass-input rounded-lg font-bold text-amber-400">
+                                </div>
+
+                                <div class="flex-1 flex flex-col min-h-[350px] mt-4">
+                                    <label class="block text-xs font-bold text-slate-300 mb-2">Marque os conteúdos para esta categoria:</label>
+                                    <div id="carousel-items-grid" class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 pr-2">
+                                        <div class="spinner-lg mx-auto col-span-full mt-10"></div>
+                                    </div>
+                                </div>
+
+                                <button id="save-carousel-btn" class="glass-button w-full rounded-xl py-4 mt-6" style="--bg-color: rgba(16, 185, 129, 0.7);">
+                                    <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                    <div class="glass-content text-white"><span class="button-text">Salvar Carrossel</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. NOVA TELA: AVATARES -->
+                <div id="avatarPage" class="content-page space-y-6">
+                    <div class="flex items-center gap-3 px-2 mb-6">
+                        <div class="p-2 bg-indigo-500/20 rounded-lg text-indigo-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+                        <h1 class="text-3xl font-bold text-white">Avatares de Perfil</h1>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        
+                        <div class="lg:col-span-1 space-y-6">
+                            <!-- Buscar no TMDB -->
+                            <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                                <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                <div class="glass-content p-6">
+                                    <h3 class="text-lg font-bold text-indigo-400 mb-2">1. Buscar Capas e Fundos (TMDB)</h3>
+                                    <p class="text-xs text-slate-400 mb-4">Pesquise uma série/filme para carregar automaticamente capas e fundos para usar como avatares.</p>
+                                    <div class="flex flex-col gap-3">
+                                        <input type="text" id="avatar-tmdb-search" placeholder="Ex: Naruto, One Piece..." class="w-full p-3 glass-input rounded-lg text-white text-sm">
+                                        <button id="avatar-tmdb-search-btn" class="glass-button w-full rounded-lg py-2" style="--bg-color: rgba(99, 102, 241, 0.7);">
+                                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                            <div class="glass-content text-white"><span class="button-text">Buscar Imagens</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                        </button>
+                                    </div>
+                                    <div id="avatar-tmdb-results" class="mt-4 space-y-2 max-h-48 overflow-y-auto pr-2"></div>
+                                </div>
+                            </div>
+
+                            <!-- Grupos Salvos -->
+                            <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                                <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                <div class="glass-content p-6">
+                                    <h3 class="text-lg font-bold text-white mb-4 border-b border-slate-700 pb-2">Grupos de Avatares Salvos</h3>
+                                    <div id="saved-avatar-groups-list" class="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
+                                        <div class="spinner mx-auto block mt-4"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Editor de Avatares -->
+                        <div class="lg:col-span-2 glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content p-6 md:p-8 flex flex-col h-full">
+                                <div class="flex justify-between items-center mb-6 border-b border-indigo-500/20 pb-4">
+                                    <h3 class="text-xl font-bold text-white">2. Editor de Avatares</h3>
+                                    <button type="button" onclick="clearAvatarEdit()" class="text-sm text-indigo-400 hover:text-indigo-300 font-bold border border-indigo-500/50 rounded-lg px-3 py-1">Limpar / Criar Novo</button>
+                                </div>
+                                
+                                <input type="hidden" id="avatar-group-id">
+                                
+                                <div class="mb-4">
+                                    <label class="block text-sm font-bold text-slate-300 mb-2">Nome do Grupo (Qual anime/série?)</label>
+                                    <input type="text" id="avatar-group-title" placeholder="Ex: Avatares de One Piece" class="w-full p-3 glass-input rounded-lg font-bold text-indigo-300">
+                                </div>
+
+                                <div class="mb-6 bg-black/30 p-4 rounded-xl border border-slate-700">
+                                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-3 pb-3 border-b border-slate-700/50">
+                                        <div>
+                                            <label class="block text-sm font-bold text-emerald-400">Modo Auto-Captura de Links</label>
+                                            <p class="text-[10px] text-slate-400 mt-1 max-w-sm">Ative e vá copiar os links. Ao retornar para esta aba ou pressionar Ctrl+V, os links serão adicionados sozinhos!</p>
+                                        </div>
+                                        <label class="flex items-center cursor-pointer gap-3">
+                                            <span class="text-xs font-bold text-slate-400" id="auto-paste-status">Desligado</span>
+                                            <div class="relative">
+                                                <input type="checkbox" id="auto-paste-toggle" class="sr-only">
+                                                <div class="switch-bg block bg-slate-800 w-12 h-7 rounded-full border border-slate-600 transition-colors"></div>
+                                                <div class="dot absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition-transform duration-300"></div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <label class="block text-xs font-bold text-amber-500 mb-2">Ou adicione manualmente:</label>
+                                    <div class="flex gap-2">
+                                        <input type="url" id="manual-avatar-url" placeholder="https://site.com/imagem_rosto.png" class="flex-1 p-2 glass-input rounded-lg text-sm">
+                                        <button type="button" id="add-manual-avatar-btn" class="glass-button rounded-lg px-4" style="--bg-color: rgba(245, 158, 11, 0.6);">
+                                            <div class="glass-content text-white text-sm font-bold">+ Add</div>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="flex-1 flex flex-col min-h-[300px]">
+                                    <label class="block text-sm font-bold text-slate-300 mb-2">Avatares neste grupo <span id="avatar-count-badge" class="ml-2 bg-indigo-600 text-white text-xs px-2 py-0.5 rounded-full">0</span></label>
+                                    <p class="text-xs text-slate-500 mb-3">Passe o mouse sobre a imagem para <b class="text-indigo-400">Recortar/Editar (✏️)</b> ou remover (X).</p>
+                                    <div id="avatar-editor-grid" class="flex-1 overflow-y-auto grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 gap-3 pr-2 content-start">
+                                        <!-- Imagens de avatar aqui -->
+                                    </div>
+                                </div>
+
+                                <button id="save-avatar-group-btn" class="glass-button w-full rounded-xl py-4 mt-6" style="--bg-color: rgba(16, 185, 129, 0.7);">
+                                    <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                    <div class="glass-content text-white"><span class="button-text">Salvar Grupo de Avatares</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6. NOVA TELA: FUNDOS DE PERFIL (HORIZONTAIS) -->
+                <div id="backgroundPage" class="content-page space-y-6">
+                    <div class="flex items-center gap-3 px-2 mb-6">
+                        <div class="p-2 bg-cyan-500/20 rounded-lg text-cyan-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>
+                        <h1 class="text-3xl font-bold text-white">Fundos de Perfil (Horizontais)</h1>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        
+                        <div class="lg:col-span-1 space-y-6">
+                            <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                                <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                <div class="glass-content p-6">
+                                    <h3 class="text-lg font-bold text-cyan-400 mb-2">1. Buscar Backdrops (TMDB)</h3>
+                                    <p class="text-xs text-slate-400 mb-4">Pesquise uma série/filme para carregar as imagens de fundo em alta qualidade.</p>
+                                    <div class="flex flex-col gap-3">
+                                        <input type="text" id="bg-tmdb-search" placeholder="Ex: Demon Slayer..." class="w-full p-3 glass-input rounded-lg text-white text-sm">
+                                        <button id="bg-tmdb-search-btn" class="glass-button w-full rounded-lg py-2" style="--bg-color: rgba(6, 182, 212, 0.7);">
+                                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                            <div class="glass-content text-white"><span class="button-text">Buscar Fundos</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                        </button>
+                                    </div>
+                                    <div id="bg-tmdb-results" class="mt-4 space-y-2 max-h-48 overflow-y-auto pr-2"></div>
+                                </div>
+                            </div>
+
+                            <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                                <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                <div class="glass-content p-6">
+                                    <h3 class="text-lg font-bold text-white mb-4 border-b border-slate-700 pb-2">Grupos de Fundos Salvos</h3>
+                                    <div id="saved-bg-groups-list" class="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
+                                        <div class="spinner mx-auto block mt-4"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="lg:col-span-2 glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content p-6 md:p-8 flex flex-col h-full">
+                                <div class="flex justify-between items-center mb-6 border-b border-cyan-500/20 pb-4">
+                                    <h3 class="text-xl font-bold text-white">2. Editor de Fundos Horizontais</h3>
+                                    <button type="button" onclick="clearBgEdit()" class="text-sm text-cyan-400 hover:text-cyan-300 font-bold border border-cyan-500/50 rounded-lg px-3 py-1">Limpar / Criar Novo</button>
+                                </div>
+                                
+                                <input type="hidden" id="bg-group-id">
+                                
+                                <div class="mb-4">
+                                    <label class="block text-sm font-bold text-slate-300 mb-2">Nome do Grupo (Qual anime/série?)</label>
+                                    <input type="text" id="bg-group-title" placeholder="Ex: Fundos de Demon Slayer" class="w-full p-3 glass-input rounded-lg font-bold text-cyan-300">
+                                </div>
+
+                                <div class="mb-6 bg-black/30 p-4 rounded-xl border border-slate-700">
+                                    <label class="block text-xs font-bold text-amber-500 mb-2">Adicionar Fundo Manualmente (Link 16:9)</label>
+                                    <div class="flex gap-2">
+                                        <input type="url" id="manual-bg-url" placeholder="https://site.com/imagem_fundo.png" class="flex-1 p-2 glass-input rounded-lg text-sm">
+                                        <button type="button" id="add-manual-bg-btn" class="glass-button rounded-lg px-4" style="--bg-color: rgba(245, 158, 11, 0.6);">
+                                            <div class="glass-content text-white text-sm font-bold">+ Add</div>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="flex-1 flex flex-col min-h-[300px]">
+                                    <label class="block text-sm font-bold text-slate-300 mb-2">Fundos neste grupo <span id="bg-count-badge" class="ml-2 bg-cyan-600 text-white text-xs px-2 py-0.5 rounded-full">0</span></label>
+                                    <p class="text-xs text-slate-500 mb-3">Estes serão usados como imagem de fundo atrás da foto na aba Perfil.</p>
+                                    <div id="bg-editor-grid" class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 pr-2 content-start">
+                                        <!-- Imagens de fundo aqui -->
+                                    </div>
+                                </div>
+
+                                <button id="save-bg-group-btn" class="glass-button w-full rounded-xl py-4 mt-6" style="--bg-color: rgba(6, 182, 212, 0.7);">
+                                    <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                    <div class="glass-content text-white"><span class="button-text">Salvar Grupo de Fundos</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 7. NOVA TELA: FUNDOS VERTICAIS (QUEM ASSISTE) -->
+                <div id="verticalBgPage" class="content-page space-y-6">
+                    <div class="flex items-center gap-3 px-2 mb-6">
+                        <div class="p-2 bg-fuchsia-500/20 rounded-lg text-fuchsia-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg></div>
+                        <h1 class="text-3xl font-bold text-white">Fundos Tela de Início (Verticais)</h1>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        
+                        <div class="lg:col-span-1 space-y-6">
+                            <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                                <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                <div class="glass-content p-6">
+                                    <h3 class="text-lg font-bold text-fuchsia-400 mb-2">1. Buscar Capas (TMDB)</h3>
+                                    <p class="text-xs text-slate-400 mb-4">Pesquise uma série/filme para carregar capas (Posters) verticais.</p>
+                                    <div class="flex flex-col gap-3">
+                                        <input type="text" id="vertical-tmdb-search" placeholder="Ex: Solo Leveling..." class="w-full p-3 glass-input rounded-lg text-white text-sm">
+                                        <button id="vertical-tmdb-search-btn" class="glass-button w-full rounded-lg py-2" style="--bg-color: rgba(217, 70, 239, 0.7);">
+                                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                            <div class="glass-content text-white"><span class="button-text">Buscar Capas Verticais</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                        </button>
+                                    </div>
+                                    <div id="vertical-tmdb-results" class="mt-4 space-y-2 max-h-48 overflow-y-auto pr-2"></div>
+                                </div>
+                            </div>
+
+                            <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                                <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                <div class="glass-content p-6">
+                                    <h3 class="text-lg font-bold text-white mb-4 border-b border-slate-700 pb-2">Grupos Verticais Salvos</h3>
+                                    <div id="saved-vertical-groups-list" class="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
+                                        <div class="spinner mx-auto block mt-4"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="lg:col-span-2 glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content p-6 md:p-8 flex flex-col h-full">
+                                <div class="flex justify-between items-center mb-6 border-b border-fuchsia-500/20 pb-4">
+                                    <h3 class="text-xl font-bold text-white">2. Editor de Fundos Verticais</h3>
+                                    <button type="button" onclick="clearVerticalEdit()" class="text-sm text-fuchsia-400 hover:text-fuchsia-300 font-bold border border-fuchsia-500/50 rounded-lg px-3 py-1">Limpar / Criar Novo</button>
+                                </div>
+                                
+                                <input type="hidden" id="vertical-group-id">
+                                
+                                <div class="mb-4">
+                                    <label class="block text-sm font-bold text-slate-300 mb-2">Nome do Grupo (Qual anime/série?)</label>
+                                    <input type="text" id="vertical-group-title" placeholder="Ex: Fundos Solo Leveling" class="w-full p-3 glass-input rounded-lg font-bold text-fuchsia-300">
+                                </div>
+
+                                <div class="mb-6 bg-black/30 p-4 rounded-xl border border-slate-700">
+                                    <label class="block text-xs font-bold text-amber-500 mb-2">Adicionar Fundo Manualmente (Link Vertical)</label>
+                                    <div class="flex gap-2">
+                                        <input type="url" id="manual-vertical-url" placeholder="https://site.com/imagem_capa.png" class="flex-1 p-2 glass-input rounded-lg text-sm">
+                                        <button type="button" id="add-manual-vertical-btn" class="glass-button rounded-lg px-4" style="--bg-color: rgba(245, 158, 11, 0.6);">
+                                            <div class="glass-content text-white text-sm font-bold">+ Add</div>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="flex-1 flex flex-col min-h-[300px]">
+                                    <label class="block text-sm font-bold text-slate-300 mb-2">Fundos neste grupo <span id="vertical-count-badge" class="ml-2 bg-fuchsia-600 text-white text-xs px-2 py-0.5 rounded-full">0</span></label>
+                                    <p class="text-xs text-slate-500 mb-3">Estes serão usados como imagem de fundo VERTICAL tela cheia na tela "Quem está assistindo?".</p>
+                                    <div id="vertical-editor-grid" class="flex-1 overflow-y-auto grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3 pr-2 content-start">
+                                        <!-- Imagens de fundo aqui -->
+                                    </div>
+                                </div>
+
+                                <button id="save-vertical-group-btn" class="glass-button w-full rounded-xl py-4 mt-6" style="--bg-color: rgba(217, 70, 239, 0.7);">
+                                    <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                    <div class="glass-content text-white"><span class="button-text">Salvar Grupo Vertical</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 8. NOVA TELA: ATUALIZAÇÃO DO APP -->
+                <div id="updatePage" class="content-page space-y-6">
+                    <div class="flex items-center gap-3 px-2 mb-6">
+                        <div class="p-2 bg-emerald-500/20 rounded-lg text-emerald-500"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg></div>
+                        <h1 class="text-3xl font-bold text-white">Histórico de Atualizações do App</h1>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-2 glass-container rounded-2xl border border-emerald-500/20" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content p-6 md:p-8 space-y-6">
+                                <h3 class="text-xl font-bold text-white mb-2">Lançar Nova Atualização</h3>
+                                <div class="bg-emerald-900/20 border border-emerald-500/30 p-4 rounded-xl">
+                                    <p class="text-emerald-200 text-sm">Adicione aqui a nova versão. O sistema manterá o histórico e forçará usuários desatualizados a baixar a versão mais alta da lista.</p>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-bold text-emerald-400 mb-2">Número da Versão</label>
+                                    <input type="text" id="update-version" class="w-full p-4 glass-input rounded-xl text-lg text-white font-bold" placeholder="Ex: 3.0.1">
+                                    <p class="text-xs text-slate-500 mt-1">Aceita formatos como 2.1, 3.0.0, 1.0.2</p>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-bold text-emerald-400 mb-2">Link Direto de Download (.apk)</label>
+                                    <input type="url" id="update-link" class="w-full p-4 glass-input rounded-xl text-white" placeholder="Link do Google Drive, MediaFire, etc...">
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-bold text-emerald-400 mb-2">Notas da Atualização (O que mudou?)</label>
+                                    <textarea id="update-notes" rows="6" class="w-full p-4 glass-input rounded-xl text-white resize-none" placeholder="Ex:&#10;🔥 Nova Interface!&#10;- Resolvemos bugs no player..."></textarea>
+                                </div>
+
+                                <button type="button" id="save-update-btn" class="glass-button w-full rounded-xl py-4 mt-6" style="--bg-color: rgba(16, 185, 129, 0.7);">
+                                    <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                    <div class="glass-content text-white text-lg"><span class="button-text">Lançar Versão para Usuários</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content p-6">
+                                <h3 class="text-xl font-bold text-white mb-4 border-b border-slate-700 pb-2">Histórico (Firebase)</h3>
+                                <div id="update-history-list" class="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                                    <div class="spinner mx-auto block mt-4"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 9. NOVA TELA: ATUALIZAÇÃO EM MASSA (CLASSIFICAÇÕES) -->
+                <div id="bulkUpdatePage" class="content-page space-y-6">
+                    <div class="flex items-center gap-3 px-2 mb-6">
+                        <div class="p-2 bg-yellow-500/20 rounded-lg text-yellow-500"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div>
+                        <h1 class="text-3xl font-bold text-white">Atualização em Massa</h1>
+                    </div>
+
+                    <div class="glass-container rounded-2xl border border-yellow-500/20" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                        <div class="glass-content p-6 md:p-8">
+                            <div class="flex flex-col md:flex-row items-center justify-between gap-6 mb-6">
+                                <div>
+                                    <h3 class="text-xl font-bold text-white mb-2">Sincronizar Classificações Indicativas</h3>
+                                    <p class="text-sm text-slate-400 max-w-2xl">Esta ferramenta vai varrer todo o seu catálogo e buscar automaticamente a idade indicativa (Livre, 10, 12, 14, 16, 18) lá no TMDB para os filmes e séries que ainda estão com este campo vazio.</p>
+                                    <p id="bulk-progress-text" class="text-yellow-400 font-bold mt-4 text-sm hidden"></p>
+                                </div>
+                                <button id="start-bulk-btn" onclick="startBulkAgeRatingUpdate()" class="glass-button flex-shrink-0 rounded-xl py-3 px-6" style="--bg-color: rgba(234, 179, 8, 0.8);">
+                                    <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                    <div class="glass-content text-slate-900 font-bold"><span class="button-text">⚡ Iniciar Varredura</span><div class="button-spinner"><div class="spinner border-slate-900 border-b-white"></div></div></div>
+                                </button>
+                            </div>
+
+                            <div class="bg-black/30 rounded-xl p-4 min-h-[250px] border border-slate-700/50">
+                                <div id="bulk-results-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[50vh] overflow-y-auto pr-2">
+                                    <div class="col-span-full flex flex-col items-center justify-center h-40 text-slate-500">
+                                        <svg class="w-12 h-12 mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                        <p>Clique em "Iniciar Varredura" para procurar animes sem classificação.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 10. NOVA TELA: SISTEMA DE CONQUISTAS -->
+                <div id="achievementsPage" class="content-page space-y-6">
+                    <div class="flex items-center gap-3 px-2 mb-6">
+                        <div class="p-2 bg-yellow-500/20 rounded-lg text-yellow-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg></div>
+                        <h1 class="text-3xl font-bold text-white">Conquistas e Medalhas</h1>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-1 space-y-6">
+                            
+                            <div class="glass-container rounded-2xl border border-pink-500/30" style="--bg-color: rgba(15, 23, 42, 0.8);">
+                                <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                <div class="glass-content p-5 space-y-4">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <span class="text-2xl">✨</span><h3 class="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-yellow-500">IA Game Designer</h3>
+                                    </div>
+                                    <p class="text-xs text-slate-400">Gere 5 conquistas de uma vez cobrindo todos os níveis (1: Muito Fácil até 5: Quase Impossível).</p>
+                                    
+                                    <div>
+                                        <input type="text" id="ai-achievement-theme" placeholder="Tema Opcional (ex: Foco em Comentários)" class="w-full p-2 glass-input rounded-lg text-sm text-white mb-2">
+                                    </div>
+                                    <button id="generate-achievements-ai-btn" class="glass-button w-full rounded-lg py-3" style="--bg-color: rgba(236, 72, 153, 0.7);">
+                                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                        <div class="glass-content text-white"><span class="button-text text-sm font-bold">Gerar Pack de Conquistas</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                                <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                <div class="glass-content p-6 flex flex-col h-full">
+                                    <div class="flex justify-between items-center mb-4">
+                                        <h3 class="text-xl font-bold text-white">Criar Conquista</h3>
+                                        <button type="button" onclick="clearAchievementEdit()" class="text-sm text-yellow-500 hover:text-yellow-400 font-bold border border-yellow-500/50 rounded-lg px-3 py-1">Novo</button>
+                                    </div>
+                                    
+                                    <input type="hidden" id="achievement-id">
+                                    
+                                    <div class="space-y-4 flex-1">
+                                        <div>
+                                            <label class="block text-xs font-bold text-slate-300 mb-1">Título</label>
+                                            <input type="text" id="achievement-title" placeholder="Ex: Otaku Iniciante" class="w-full p-3 glass-input rounded-lg font-bold text-yellow-400">
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-bold text-slate-300 mb-1">Descrição</label>
+                                            <textarea id="achievement-desc" rows="2" placeholder="Ex: Assistiu aos seus primeiros 10 episódios." class="w-full p-3 glass-input rounded-lg text-sm text-white resize-none"></textarea>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-bold text-slate-300 mb-1">Nível de Dificuldade</label>
+                                            <select id="achievement-difficulty" class="w-full p-3 glass-input rounded-lg text-sm text-white cursor-pointer">
+                                                <option value="1">1 - Muito Fácil</option>
+                                                <option value="2">2 - Fácil</option>
+                                                <option value="3">3 - Normal</option>
+                                                <option value="4">4 - Difícil</option>
+                                                <option value="5">5 - Quase Impossível!</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-bold text-slate-300 mb-1">URL da Medalha (PNG Transparente)</label>
+                                            <input type="url" id="achievement-icon" placeholder="https://exemplo.com/medalha.png" class="w-full p-3 glass-input rounded-lg text-sm text-white">
+                                            <div class="mt-2 flex justify-center p-4 bg-black/40 rounded-lg border border-slate-700">
+                                                <img id="achievement-icon-preview" src="https://placehold.co/100x100/1c1917/999999?text=IMG" class="w-20 h-20 object-contain drop-shadow-[0_0_15px_rgba(234,179,8,0.3)]">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-bold text-slate-300 mb-1">Condição de Desbloqueio</label>
+                                            <select id="achievement-type" class="w-full p-3 glass-input rounded-lg text-sm text-white cursor-pointer">
+                                                <option value="WATCH_EPISODES">Assistir Episódios (Quantidade)</option>
+                                                <option value="WRITE_COMMENTS">Escrever Comentários (Quantidade)</option>
+                                                <option value="ACCOUNT_AGE_DAYS">Dias de Conta Ativa</option>
+                                                <option value="MANUAL">Apenas Manual (Concedido por Admins)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-bold text-slate-300 mb-1">Quantidade Necessária (Alvo)</label>
+                                            <input type="number" id="achievement-target" placeholder="Ex: 10" class="w-full p-3 glass-input rounded-lg text-sm text-white">
+                                        </div>
+                                    </div>
+
+                                    <button id="save-achievement-btn" class="glass-button w-full rounded-xl py-3 mt-6" style="--bg-color: rgba(234, 179, 8, 0.7);">
+                                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                        <div class="glass-content text-slate-900"><span class="button-text font-bold">Salvar Conquista</span><div class="button-spinner"><div class="spinner border-slate-900 border-b-white"></div></div></div>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="lg:col-span-2 glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content p-6">
+                                <h3 class="text-xl font-bold text-white mb-4 border-b border-slate-700 pb-2">Conquistas Disponíveis</h3>
+                                <div id="achievements-list" class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[65vh] overflow-y-auto pr-2 pb-4">
+                                    <div class="spinner mx-auto block mt-4 col-span-full"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals Globais -->
+    <div id="tmdb-images-modal" class="hidden fixed inset-0 bg-black/90 z-[400] flex items-center justify-center p-4">
+        <div class="glass-container w-full max-w-5xl h-[80vh] flex flex-col rounded-2xl" style="--bg-color: rgba(30, 41, 59, 0.95);">
+            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+            <div class="glass-content flex flex-col h-full">
+                <div class="flex items-center justify-between p-6 border-b border-slate-700">
+                    <h2 class="text-2xl font-bold text-white">Selecionar Imagens (TMDB)</h2>
+                    <button onclick="document.getElementById('tmdb-images-modal').classList.add('hidden')" class="text-slate-400 hover:text-white"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                </div>
+                <div class="flex-1 overflow-y-auto p-6 space-y-8">
+                    <div id="images-loading" class="hidden text-center py-10"><div class="spinner-lg mx-auto"></div></div>
+                    <div>
+                        <h3 class="text-lg font-bold text-amber-500 mb-4 border-b border-amber-500/30 pb-2">Capas Principais (Posters)</h3>
+                        <div id="tmdb-posters-grid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4"></div>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-blue-400 mb-4 border-b border-blue-400/30 pb-2">Imagens de Fundo (Backdrops)</h3>
+                        <div id="tmdb-backdrops-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="avatar-crop-modal" class="hidden fixed inset-0 bg-black/95 z-[500] flex items-center justify-center p-4">
+        <div class="glass-container w-full max-w-2xl rounded-2xl" style="--bg-color: rgba(30, 41, 59, 0.95);">
+            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+            <div class="glass-content flex flex-col">
+                <div class="flex items-center justify-between p-6 border-b border-slate-700">
+                    <h2 class="text-2xl font-bold text-white">Recortar Avatar</h2>
+                    <button onclick="closeAvatarCropper()" class="text-slate-400 hover:text-white"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                </div>
+                <div class="p-6">
+                    <div class="w-full bg-black/50 rounded-lg overflow-hidden h-[50vh] relative block">
+                        <img id="cropper-image" src="" class="block max-w-full">
+                    </div>
+                    <div class="flex justify-end gap-4 mt-6">
+                        <button onclick="closeAvatarCropper()" class="glass-button rounded-lg py-2 px-6" style="--bg-color: rgba(255, 255, 255, 0.1);"><div class="glass-content">Cancelar</div></button>
+                        <button onclick="saveAvatarCrop()" class="glass-button rounded-lg py-2 px-8" style="--bg-color: rgba(99, 102, 241, 0.8);"><div class="glass-content text-white font-bold">Salvar Recorte</div></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-notification" class="fixed bottom-5 right-5 text-white py-3 px-6 rounded-2xl shadow-lg transform translate-x-[120%] transition-transform duration-300 z-[250] glass-container" style="--bg-color: rgba(245, 158, 11, 0.8);">
+        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+        <div class="glass-content !p-3 !px-6"><p id="toast-message" class="font-semibold"></p></div>
+    </div>
+
+    <div id="confirm-modal" class="hidden fixed inset-0 bg-black/80 z-[300] flex items-center justify-center p-4">
+        <div class="glass-container w-full max-w-md rounded-2xl" style="--bg-color: rgba(30, 41, 59, 0.9);">
+            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+            <div class="glass-content text-center p-8">
+                <h2 id="confirm-title" class="text-2xl font-bold text-red-500 mb-2">Atenção</h2>
+                <p id="confirm-message" class="text-slate-300 mb-8"></p>
+                <div class="flex justify-center gap-4">
+                    <button id="confirm-cancel-btn" class="glass-button rounded-lg py-2 px-6" style="--bg-color: rgba(255, 255, 255, 0.1);"><div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div><div class="glass-content">Cancelar</div></button>
+                    <button id="confirm-ok-btn" class="glass-button rounded-lg py-2 px-8" style="--bg-color: rgba(220, 38, 38, 0.8);"><div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div><div class="glass-content text-white">Confirmar</div></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- O Script foi movido para o arquivo script.js -->
+    <script type="module" src="script.js"></script>
+</body>
+</html>
