@@ -1461,13 +1461,19 @@ function initBadgeManagerLogic() {
 
 
 // ==========================================
-// LÓGICA DO CARROSSEL DE IA 
+// LÓGICA DE GERAÇÃO AVANÇADA DE CARROSSEL COM IA
 // ==========================================
 function initCarouselLogic() {
-    const savedKey = localStorage.getItem('mango_gemini_key');
-    if(savedKey) document.getElementById('gemini-api-key').value = savedKey;
+    // Carrega as chaves salvas do LocalStorage (se existirem)
+    const savedGeminiKey = localStorage.getItem('mango_gemini_key');
+    const savedGroqKey = localStorage.getItem('mango_groq_key');
+    
+    // Assumimos que o HTML será atualizado com esses IDs
+    if(savedGeminiKey && document.getElementById('gemini-api-key')) document.getElementById('gemini-api-key').value = savedGeminiKey;
+    if(savedGroqKey && document.getElementById('groq-api-key')) document.getElementById('groq-api-key').value = savedGroqKey;
 
     const grid = document.getElementById('carousel-items-grid');
+    let pendingAiCarousels = []; // Variável temporária para armazenar as sugestões da IA antes de salvar
     
     onSnapshot(collection(db, 'carousels'), (snapshot) => {
         carouselsData = [];
@@ -1476,6 +1482,7 @@ function initCarouselLogic() {
     });
 
     function renderGrid() {
+        if(!grid) return;
         grid.innerHTML = '';
         catalogData.forEach(item => {
             const div = document.createElement('label'); div.className = "cursor-pointer relative";
@@ -1488,6 +1495,7 @@ function initCarouselLogic() {
 
     function renderSavedCarousels() {
         const list = document.getElementById('saved-carousels-list');
+        if(!list) return;
         list.innerHTML = '';
         if (carouselsData.length === 0) {
             list.innerHTML = '<p class="text-sm text-slate-400">Nenhum carrossel salvo.</p>';
@@ -1534,62 +1542,202 @@ function initCarouselLogic() {
         document.getElementById('save-carousel-btn').querySelector('.button-text').textContent = "Salvar Novo Carrossel";
     }
 
+    // NOVA LÓGICA DE GERAÇÃO INTELIGENTE COM PREVIEW E MÚLTIPLOS MODELOS
     document.getElementById('generate-all-ai-btn').onclick = async () => {
-        const key = document.getElementById('gemini-api-key').value.trim();
+        // Fallbacks caso o HTML ainda não tenha os IDs novos
+        const aiModelElement = document.getElementById('ai-model-select');
+        const aiModel = aiModelElement ? aiModelElement.value : 'gemini'; 
+        
+        const geminiKeyEl = document.getElementById('gemini-api-key');
+        const groqKeyEl = document.getElementById('groq-api-key');
+        const geminiKey = geminiKeyEl ? geminiKeyEl.value.trim() : localStorage.getItem('mango_gemini_key') || '';
+        const groqKey = groqKeyEl ? groqKeyEl.value.trim() : localStorage.getItem('mango_groq_key') || '';
+        
+        const qtyEl = document.getElementById('carousel-quantity');
+        const qty = qtyEl ? parseInt(qtyEl.value) : 5;
+
         const btn = document.getElementById('generate-all-ai-btn');
-        if(!key) return showToast("Por favor, insira a chave da API do Gemini", true);
+
+        if(aiModel === 'gemini' && !geminiKey) return showToast("Por favor, insira a chave da API do Gemini.", true);
+        if(aiModel === 'groq' && !groqKey) return showToast("Por favor, insira a chave da API da Groq.", true);
         if(catalogData.length === 0) return showToast("Seu catálogo está vazio.", true);
         
-        localStorage.setItem('mango_gemini_key', key); 
+        if(geminiKey) localStorage.setItem('mango_gemini_key', geminiKey); 
+        if(groqKey) localStorage.setItem('mango_groq_key', groqKey); 
+
         showButtonSpinner(btn);
         
         const simpleCat = catalogData.map(c => ({ id: c.id, title: c.title, gen: c.genres.join(',') }));
         
-        const sysPrompt = `
-            Você é um sistema de organização de catálogo de animes e filmes. Analise a seguinte lista: ${JSON.stringify(simpleCat)}.
-            Sua tarefa é agrupar os conteúdos ESTRITAMENTE por GÊNEROS clássicos (ex: "Ação", "Comédia", "Terror", "Ficção Científica", "Romance", "Fantasia").
-            Crie de 4 a 8 categorias baseadas nos gêneros que mais aparecem no catálogo.
-            NÃO invente frases ou nomes criativos (como "Shounen de arrepiar"), use APENAS o nome limpo do gênero ou combinação simples (ex: "Ação e Aventura").
-            NÃO crie as categorias "Lançamentos", "Adicionados Recentemente" ou "Destaques da Semana".
-            Para cada gênero, adicione de 4 a 12 IDs de conteúdos que pertençam a ele.
-            Responda APENAS E EXCLUSIVAMENTE com um objeto JSON válido, sem tags markdown (sem \`\`\`json), onde as chaves são os gêneros e os valores são arrays com os IDs.
-            Exemplo exato de resposta esperada: {"Ação": ["id1", "id2"], "Comédia Romântica": ["id3", "id4"]}
-        `;
+        const sysPrompt = `Você é um curador especialista em animes e filmes. Analise o seguinte catálogo: ${JSON.stringify(simpleCat)}.
+        Sua tarefa é criar EXATAMENTE ${qty} categorias temáticas.
+        Use nomes extremamente criativos e chamativos para os títulos dos carrosséis (ex: "Shounen de Arrepiar", "Romances para Chorar", "Ação Frenética", "Para Maratonar Hoje").
+        NÃO crie as categorias padrão do sistema: "Lançamentos", "Adicionados Recentemente" ou "Destaques da Semana".
+        Para cada categoria criada, adicione de 4 a 12 IDs de conteúdos que combinem perfeitamente com o tema.
+        Responda APENAS E EXCLUSIVAMENTE com um JSON Array de objetos. Sem formatação markdown, sem texto antes ou depois.
+        Formato OBRIGATÓRIO exato:
+        [
+          {"title": "Nome Criativo Aqui", "items": ["id1", "id2"]},
+          {"title": "Outro Nome Divertido", "items": ["id3", "id4"]}
+        ]`;
 
         try {
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: sysPrompt }] }] })
-            });
-            if(!res.ok) throw new Error("Erro na requisição ao Gemini");
-            
-            const data = await res.json();
-            let aiText = data.candidates[0].content.parts[0].text;
-            aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
-            const newCarousels = JSON.parse(aiText);
-            
-            const oldDocs = await getDocs(query(collection(db, 'carousels'), where('isAiGenerated', '==', true)));
-            const deletePromises = oldDocs.docs.map(d => deleteDoc(doc(db, 'carousels', d.id)));
-            await Promise.all(deletePromises);
+            let aiText = "";
 
-            const savePromises = Object.keys(newCarousels).map(categoryName => {
-                return addDoc(collection(db, 'carousels'), {
-                    title: categoryName,
-                    items: newCarousels[categoryName],
-                    isAiGenerated: true,
-                    createdAt: serverTimestamp()
+            if (aiModel === 'gemini') {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: sysPrompt }] }] })
                 });
-            });
-            await Promise.all(savePromises);
-
-            showToast(`A IA gerou ${Object.keys(newCarousels).length} categorias com sucesso!`);
+                if(!res.ok) throw new Error("Erro na requisição ao Gemini");
+                const data = await res.json();
+                aiText = data.candidates[0].content.parts[0].text;
+            } else if (aiModel === 'groq') {
+                // Utilizando a API da LLaMA através da Groq (Modelo rápido e bom com JSON)
+                const res = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${groqKey}`
+                    },
+                    body: JSON.stringify({
+                        model: "llama3-70b-8192", 
+                        messages: [{"role": "user", "content": sysPrompt}],
+                        temperature: 0.7
+                    })
+                });
+                if(!res.ok) throw new Error("Erro na requisição à Groq");
+                const data = await res.json();
+                aiText = data.choices[0].message.content;
+            }
+            
+            // Limpeza agressiva do texto retornado para garantir que é um JSON puro
+            aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
+            aiText = aiText.substring(aiText.indexOf('['), aiText.lastIndexOf(']') + 1);
+            
+            pendingAiCarousels = JSON.parse(aiText);
+            
+            // Se o HTML novo já existir, renderizamos a tela de revisão
+            if(document.getElementById('ai-carousel-preview-area')) {
+                renderAiPreview(pendingAiCarousels);
+                showToast(`A IA gerou ${pendingAiCarousels.length} sugestões! Revise antes de salvar.`);
+            } else {
+                // FALLBACK: Caso o usuário execute isso antes de atualizar o HTML, salva direto do jeito antigo.
+                await saveAllPendingCarouselsDirectly(pendingAiCarousels);
+            }
+            
         } catch(e) { 
             console.error(e);
             showToast("Erro ao processar com a IA. Tente novamente.", true); 
         } finally { 
-            hideButtonSpinner(btn, 'Criar Categorias com IA'); 
+            hideButtonSpinner(btn, 'Gerar Sugestões com IA'); 
         }
     };
 
+    // Renderiza a área de revisão das sugestões da IA
+    window.renderAiPreview = function(carousels) {
+        const container = document.getElementById('ai-carousel-preview-area');
+        const list = document.getElementById('ai-carousel-suggestions-list');
+        if(!container || !list) return;
+
+        container.classList.remove('hidden');
+        list.innerHTML = '';
+
+        carousels.forEach((c, idx) => {
+            const div = document.createElement('div');
+            div.className = "p-4 bg-black/40 rounded-xl border border-pink-500/30 mb-3";
+            
+            // Puxa as capas dos animes para exibir na miniatura
+            const imagesHtml = c.items.map(itemId => {
+                const catItem = catalogData.find(x => x.id === itemId);
+                if(catItem) return `<img src="${catItem.poster}" class="w-10 h-14 object-cover rounded shadow border border-slate-700" title="${escapeHTML(catItem.title)}">`;
+                return '';
+            }).join('');
+
+            div.innerHTML = `
+                <div class="flex items-center gap-3 mb-3">
+                    <input type="checkbox" class="ai-suggestion-check w-5 h-5 text-pink-500 rounded border-gray-500 bg-transparent focus:ring-pink-500 cursor-pointer" value="${idx}" checked>
+                    <input type="text" id="ai-title-${idx}" value="${escapeHTML(c.title)}" class="flex-1 p-2 glass-input rounded-lg font-bold text-pink-300 text-sm">
+                    <span class="text-xs font-bold text-slate-400 bg-slate-800 px-2 py-1 rounded border border-slate-600">${c.items.length} itens</span>
+                </div>
+                <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                    ${imagesHtml || '<span class="text-xs text-slate-500">Itens não encontrados</span>'}
+                </div>
+            `;
+            list.appendChild(div);
+        });
+    };
+
+    // Botão final que pega o que você revisou e salva de verdade
+    const saveSelectedBtn = document.getElementById('save-selected-ai-btn');
+    if(saveSelectedBtn) {
+        saveSelectedBtn.onclick = async (e) => {
+            const btn = e.currentTarget;
+            showButtonSpinner(btn);
+
+            try {
+                const checkboxes = document.querySelectorAll('.ai-suggestion-check:checked');
+                if(checkboxes.length === 0) {
+                    hideButtonSpinner(btn, 'Salvar Selecionados');
+                    return showToast("Selecione pelo menos um carrossel para salvar.", true);
+                }
+
+                const finalCarousels = [];
+                checkboxes.forEach(chk => {
+                    const idx = chk.value;
+                    const title = document.getElementById(`ai-title-${idx}`).value.trim();
+                    finalCarousels.push({
+                        title: title,
+                        items: pendingAiCarousels[idx].items
+                    });
+                });
+
+                // Deleta todos os carrosséis gerados por IA antigos
+                const oldDocs = await getDocs(query(collection(db, 'carousels'), where('isAiGenerated', '==', true)));
+                const deletePromises = oldDocs.docs.map(d => deleteDoc(doc(db, 'carousels', d.id)));
+                await Promise.all(deletePromises);
+
+                // Salva os novos escolhidos
+                const savePromises = finalCarousels.map(c => {
+                    return addDoc(collection(db, 'carousels'), {
+                        title: c.title,
+                        items: c.items,
+                        isAiGenerated: true,
+                        createdAt: serverTimestamp()
+                    });
+                });
+                await Promise.all(savePromises);
+
+                showToast(`Sucesso! ${finalCarousels.length} novos carrosséis publicados no App.`);
+                document.getElementById('ai-carousel-preview-area').classList.add('hidden');
+                pendingAiCarousels = []; // Limpa o rascunho
+            } catch (err) {
+                console.error(err);
+                showToast("Erro ao salvar os carrosséis.", true);
+            } finally {
+                hideButtonSpinner(btn, 'Salvar Selecionados');
+            }
+        };
+    }
+
+    // Função interna caso o HTML ainda esteja desatualizado (Compatibilidade retroativa)
+    async function saveAllPendingCarouselsDirectly(carouselsArray) {
+        const oldDocs = await getDocs(query(collection(db, 'carousels'), where('isAiGenerated', '==', true)));
+        const deletePromises = oldDocs.docs.map(d => deleteDoc(doc(db, 'carousels', d.id)));
+        await Promise.all(deletePromises);
+
+        const savePromises = carouselsArray.map(c => {
+            return addDoc(collection(db, 'carousels'), {
+                title: c.title,
+                items: c.items,
+                isAiGenerated: true,
+                createdAt: serverTimestamp()
+            });
+        });
+        await Promise.all(savePromises);
+        showToast(`A IA gerou ${carouselsArray.length} categorias com sucesso!`);
+    }
+
+    // Lógica para salvar carrossel manualmente do Editor à direita
     document.getElementById('save-carousel-btn').onclick = async () => {
         const title = document.getElementById('carousel-title').value.trim();
         const selected = Array.from(document.querySelectorAll('.catalog-check:checked')).map(c => c.value);
