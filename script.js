@@ -1586,9 +1586,14 @@ function initCarouselLogic() {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: sysPrompt }] }] })
                 });
-                if(!res.ok) throw new Error("Erro na requisição ao Gemini");
+                
+                if(!res.ok) {
+                    const errObj = await res.json();
+                    throw new Error(`Erro Gemini: ${errObj.error?.message || res.status}`);
+                }
                 const data = await res.json();
                 aiText = data.candidates[0].content.parts[0].text;
+                
             } else if (aiModel === 'groq') {
                 // Utilizando a API da Groq com o Llama 3 70B
                 const res = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
@@ -1599,19 +1604,44 @@ function initCarouselLogic() {
                     },
                     body: JSON.stringify({
                         model: "llama3-70b-8192", 
-                        messages: [{"role": "user", "content": sysPrompt}],
+                        messages: [
+                            {
+                                "role": "system", 
+                                "content": "You are a machine that outputs ONLY pure JSON arrays. No markdown, no conversational text."
+                            },
+                            {
+                                "role": "user", 
+                                "content": sysPrompt
+                            }
+                        ],
                         temperature: 0.7
                     })
                 });
-                if(!res.ok) throw new Error("Erro na requisição à Groq");
+                
+                if(!res.ok) {
+                    let errMsg = "Erro Desconhecido";
+                    try {
+                        const errObj = await res.json();
+                        errMsg = errObj.error?.message || JSON.stringify(errObj);
+                    } catch(e) { errMsg = res.statusText; }
+                    throw new Error(`Erro Groq: ${errMsg}`);
+                }
+                
                 const data = await res.json();
                 aiText = data.choices[0].message.content;
             }
             
-            // Limpeza agressiva do texto retornado para garantir que é um JSON puro
-            aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
-            aiText = aiText.substring(aiText.indexOf('['), aiText.lastIndexOf(']') + 1);
+            console.log("Resposta bruta da IA:", aiText);
+
+            // Limpeza agressiva e segura do JSON
+            const startIndex = aiText.indexOf('[');
+            const endIndex = aiText.lastIndexOf(']');
             
+            if (startIndex === -1 || endIndex === -1) {
+                throw new Error("A resposta da IA não contém um formato JSON válido.");
+            }
+            
+            aiText = aiText.substring(startIndex, endIndex + 1);
             pendingAiCarousels = JSON.parse(aiText);
             
             if(document.getElementById('ai-carousel-preview-area')) {
@@ -1623,7 +1653,11 @@ function initCarouselLogic() {
             
         } catch(e) { 
             console.error(e);
-            showToast("Erro ao processar com a IA. Tente novamente.", true); 
+            if (e.name === 'TypeError') {
+                showToast("Erro de Conexão ou CORS. Verifique sua chave da API.", true);
+            } else {
+                showToast(e.message, true); // Agora o erro da Groq vai aparecer direto no Toast vermelho
+            }
         } finally { 
             hideButtonSpinner(btn, 'Gerar Sugestões com IA'); 
         }
