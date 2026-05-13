@@ -1595,7 +1595,7 @@ function initCarouselLogic() {
                 aiText = data.candidates[0].content.parts[0].text;
                 
             } else if (aiModel === 'groq') {
-                // Utilizando a API da Groq com o Llama 3 70B
+                // Utilizando a API da Groq com o Llama 3.3 70B
                 const res = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
                     method: 'POST',
                     headers: {
@@ -1603,7 +1603,7 @@ function initCarouselLogic() {
                         'Authorization': `Bearer ${groqKey}`
                     },
                     body: JSON.stringify({
-                        model: "llama3-70b-8192", 
+                        model: "llama-3.3-70b-versatile", 
                         messages: [
                             {
                                 "role": "system", 
