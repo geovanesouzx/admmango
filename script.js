@@ -477,7 +477,6 @@ window.goToAddFromRequest = function(tmdbId, mediaType) {
     window.selectItem(tmdbId, mediaType);
 };
 
-
 // ==========================================
 // SISTEMA DE IMAGENS DO TMDB
 // ==========================================
@@ -528,7 +527,6 @@ window.openTmdbImages = async function(mode) {
         postersGrid.innerHTML = '<p class="text-white">Nenhuma imagem encontrada.</p>';
     }
 }
-
 
 // ==========================================
 // SISTEMA UNIFICADO DE TEMPORADAS E EPISÓDIOS
@@ -933,7 +931,6 @@ window.handleAddSeasonClick = async function(seasonNum, btnElement, isEdit, tmdb
     group.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-
 // ==========================================
 // CATÁLOGO
 // ==========================================
@@ -1005,7 +1002,6 @@ window.deleteContent = function(id, title) {
         await deleteDoc(doc(db, 'content', id)); showToast('Excluído com sucesso!');
     });
 }
-
 
 // ==========================================
 // ADICIONAR / EDITAR LÓGICA
@@ -1459,7 +1455,6 @@ function initBadgeManagerLogic() {
     };
 }
 
-
 // ==========================================
 // LÓGICA DE GERAÇÃO AVANÇADA DE CARROSSEL COM IA
 // ==========================================
@@ -1595,7 +1590,7 @@ function initCarouselLogic() {
                 aiText = data.candidates[0].content.parts[0].text;
                 
             } else if (aiModel === 'groq') {
-                // Utilizando a API da Groq com o Llama 3.3 70B
+                // Utilizando o modelo suportado ATUALIZADO da Groq: llama-3.3-70b-versatile
                 const res = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
                     method: 'POST',
                     headers: {
@@ -2274,7 +2269,6 @@ function initBackgroundLogic() {
         } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(btn, 'Salvar Grupo de Fundos'); }
     };
 }
-
 
 // ==========================================
 // LÓGICA DA ABA DE FUNDOS VERTICAIS (QUEM ASSISTE)
