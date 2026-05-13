@@ -1468,7 +1468,6 @@ function initCarouselLogic() {
     const savedGeminiKey = localStorage.getItem('mango_gemini_key');
     const savedGroqKey = localStorage.getItem('mango_groq_key');
     
-    // Assumimos que o HTML será atualizado com esses IDs
     if(savedGeminiKey && document.getElementById('gemini-api-key')) document.getElementById('gemini-api-key').value = savedGeminiKey;
     if(savedGroqKey && document.getElementById('groq-api-key')) document.getElementById('groq-api-key').value = savedGroqKey;
 
@@ -1544,7 +1543,6 @@ function initCarouselLogic() {
 
     // NOVA LÓGICA DE GERAÇÃO INTELIGENTE COM PREVIEW E MÚLTIPLOS MODELOS
     document.getElementById('generate-all-ai-btn').onclick = async () => {
-        // Fallbacks caso o HTML ainda não tenha os IDs novos
         const aiModelElement = document.getElementById('ai-model-select');
         const aiModel = aiModelElement ? aiModelElement.value : 'gemini'; 
         
@@ -1592,7 +1590,7 @@ function initCarouselLogic() {
                 const data = await res.json();
                 aiText = data.candidates[0].content.parts[0].text;
             } else if (aiModel === 'groq') {
-                // Utilizando a API da LLaMA através da Groq (Modelo rápido e bom com JSON)
+                // Utilizando a API da Groq com o Llama 3 70B
                 const res = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
                     method: 'POST',
                     headers: {
@@ -1616,12 +1614,10 @@ function initCarouselLogic() {
             
             pendingAiCarousels = JSON.parse(aiText);
             
-            // Se o HTML novo já existir, renderizamos a tela de revisão
             if(document.getElementById('ai-carousel-preview-area')) {
                 renderAiPreview(pendingAiCarousels);
                 showToast(`A IA gerou ${pendingAiCarousels.length} sugestões! Revise antes de salvar.`);
             } else {
-                // FALLBACK: Caso o usuário execute isso antes de atualizar o HTML, salva direto do jeito antigo.
                 await saveAllPendingCarouselsDirectly(pendingAiCarousels);
             }
             
