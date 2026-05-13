@@ -715,7 +715,12 @@
                             <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
                                 <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
                                 <div class="glass-content p-5">
-                                    <h3 class="text-lg font-bold text-white mb-4 border-b border-slate-700 pb-2">Carrosséis Salvos</h3>
+                                    <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                                        <h3 class="text-lg font-bold text-white">Carrosséis Salvos</h3>
+                                        <button type="button" onclick="deleteAllCarousels()" class="text-xs text-red-500 hover:text-red-400 font-bold border border-red-500/50 rounded-lg px-2 py-1 flex items-center gap-1 transition-colors">
+                                            🗑️ Apagar Todos
+                                        </button>
+                                    </div>
                                     <div id="saved-carousels-list" class="space-y-3 max-h-64 overflow-y-auto pr-2">
                                         <div class="spinner mx-auto block mt-4"></div>
                                     </div>
