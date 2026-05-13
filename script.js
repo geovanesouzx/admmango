@@ -1529,6 +1529,25 @@ function initCarouselLogic() {
         });
     };
 
+    window.deleteAllCarousels = function() {
+        showConfirm('Apagar TODOS', 'Tem certeza absoluta? Isso excluirá todas as categorias (manuais e geradas por IA) da tela inicial do seu app.', async () => {
+            try {
+                const snap = await getDocs(collection(db, 'carousels'));
+                if (snap.empty) return showToast('Nenhum carrossel para apagar.');
+                
+                showToast('Apagando todos os carrosséis...');
+                const deletePromises = snap.docs.map(d => deleteDoc(doc(db, 'carousels', d.id)));
+                await Promise.all(deletePromises);
+                
+                showToast('Todos os carrosséis foram apagados!');
+                clearCarouselEdit();
+            } catch(e) {
+                console.error(e);
+                showToast('Erro ao apagar carrosséis.', true);
+            }
+        });
+    };
+
     window.clearCarouselEdit = function() {
         document.getElementById('carousel-edit-id').value = '';
         document.getElementById('carousel-title').value = '';
