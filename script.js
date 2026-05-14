@@ -2202,7 +2202,7 @@ function initBackgroundLogic() {
             if (backdrops.length > 0) {
                 currentBgUrls = [...new Set([...currentBgUrls, ...backdrops])]; 
                 renderBgEditorGrid();
-                showToast(`${backdrops.length} fundos carregados! Apague os que não quiser.`);
+                showToast(`${backdrops.length} fundos carregadas! Apague os que não quiser.`);
             } else {
                 showToast("Este conteúdo não tem fundos no TMDB.", true);
             }
@@ -2981,6 +2981,128 @@ function initAchievementsLogic() {
     };
 }
 
+// ==========================================
+// LÓGICA DO MANGO FEED (GUILDA)
+// ==========================================
+window.pollOptionCount = 0;
+
+window.addPollOption = function() {
+    window.pollOptionCount++;
+    const container = document.getElementById('pollContainer');
+    const hint = document.getElementById('pollHint');
+    if (hint) hint.style.display = 'none';
+
+    const div = document.createElement('div');
+    div.className = 'flex items-center gap-2 mb-2';
+    div.id = `poll-opt-div-${window.pollOptionCount}`;
+    
+    div.innerHTML = `
+        <div class="flex-grow min-w-0">
+            <input type="text" class="poll-input w-full p-3 glass-input rounded-xl text-white font-bold" placeholder="Opção ${window.pollOptionCount}" required>
+        </div>
+        <button type="button" onclick="removePollOption('${div.id}')" class="glass-button rounded-xl px-4 py-3 flex-shrink-0" style="--bg-color: rgba(220,38,38,0.6);" title="Remover Opção">
+            <div class="glass-content">🗑️</div>
+        </button>
+    `;
+    container.appendChild(div);
+};
+
+window.removePollOption = function(id) {
+    const el = document.getElementById(id);
+    if(el) el.remove();
+    if(document.querySelectorAll('.poll-input').length === 0) {
+        const hint = document.getElementById('pollHint');
+        if(hint) hint.style.display = 'block';
+    }
+};
+
+function initFeedLogic() {
+    const feedForm = document.getElementById('feed-post-form');
+    if (!feedForm) return;
+
+    feedForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const currentUser = auth.currentUser;
+        if(!currentUser) {
+            return showToast('Você precisa estar logado para postar.', true);
+        }
+
+        const btn = document.getElementById('feed-submit-btn');
+        showButtonSpinner(btn);
+
+        try {
+            // Captura Enquetes
+            const pollInputs = document.querySelectorAll('.poll-input');
+            let pollOptions = [];
+            pollInputs.forEach(input => {
+                if(input.value.trim() !== '') {
+                    pollOptions.push({
+                        id: doc(collection(db, "temp")).id, // Gera um ID único nativo do Firebase
+                        text: input.value.trim(), 
+                        voters: []
+                    });
+                }
+            });
+
+            // Captura Mídias
+            const mediaUrlInput = document.getElementById('feed-media-url').value.trim();
+            let mediaTypeInput = document.getElementById('feed-media-type').value;
+            
+            if(mediaUrlInput !== '' && mediaTypeInput === '') {
+                mediaTypeInput = 'IMAGE'; // Padrão se tiver link mas o usuário esquecer a select
+            } else if(mediaUrlInput === '') {
+                mediaTypeInput = '';
+            }
+
+            const postText = document.getElementById('feed-post-text').value.trim();
+
+            // Validação
+            if(postText === '' && mediaUrlInput === '' && pollOptions.length === 0) {
+                throw new Error("A postagem não pode ser totalmente vazia!");
+            }
+
+            // Geramos uma referência para criar o post com ID nativo do Firebase
+            const newPostRef = doc(collection(db, "guilda_posts"));
+            
+            // Montando o Objeto
+            const postData = {
+                id: newPostRef.id,
+                uid: currentUser.uid, 
+                profileId: "admin_profile", 
+                authorName: document.getElementById('feed-author-name').value.trim(),
+                authorUsername: document.getElementById('feed-author-username').value.trim(),
+                authorAvatar: document.getElementById('feed-author-avatar').value.trim(),
+                isAuthorVerified: document.getElementById('feed-is-verified').checked,
+                text: postText,
+                mediaUrl: mediaUrlInput,
+                mediaType: mediaTypeInput,
+                timestamp: Date.now(), 
+                likes: [],
+                commentsCount: 0,
+                viewsCount: 0, 
+                pollOptions: pollOptions
+            };
+
+            // Salva na Coleção correta
+            await setDoc(newPostRef, postData);
+
+            // Reseta a interface
+            showToast('Postagem publicada com sucesso no Feed!');
+            feedForm.reset();
+            document.getElementById('pollContainer').innerHTML = '';
+            document.getElementById('pollHint').style.display = 'block';
+            window.pollOptionCount = 0;
+
+        } catch (error) {
+            console.error("Erro ao postar:", error);
+            showToast(error.message || 'Houve um problema ao salvar no banco.', true);
+        } finally {
+            hideButtonSpinner(btn, 'Publicar no App');
+        }
+    });
+}
+
 // Inicialização principal da aplicação
 document.addEventListener('DOMContentLoaded', () => {
     onAuthStateChanged(auth, (user) => {
@@ -3004,6 +3126,7 @@ document.addEventListener('DOMContentLoaded', () => {
             initVerifyLogic(); 
             initNotificationsLogic(); 
             initAchievementsLogic(); 
+            initFeedLogic(); // <--- Aba do Mango Feed (Guilda) Inicializada aqui!
 
             document.querySelectorAll('.nav-link').forEach(l => {
                 l.addEventListener('click', (e) => {
