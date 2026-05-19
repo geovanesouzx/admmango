@@ -30,6 +30,9 @@ let verticalGroupsData = [];
 let requestsData = []; 
 let achievementsData = []; 
 
+// NOVA VARIÁVEL GLOBAL PARA O TELEGRAM
+let telegramConfig = { botToken: '', channels: '', appLink: '', active: false };
+
 function escapeHTML(str) { return str == null ? '' : String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 
 window.initializeGlassEffects = function() {
@@ -137,8 +140,44 @@ async function fetchTmdbAgeRating(id, type) {
 }
 
 // ==========================================
-// SISTEMA DE NOTIFICAÇÕES (IN-APP E PUSH)
+// SISTEMA DE NOTIFICAÇÕES (IN-APP, PUSH E TELEGRAM)
 // ==========================================
+
+// NOVA FUNÇÃO: Disparo para o Telegram
+window.sendToTelegram = async function(title, synopsis, imageUrl, isUpdate = false) {
+    if (!telegramConfig.active || !telegramConfig.botToken || !telegramConfig.channels) return;
+
+    const channels = telegramConfig.channels.split(',').map(c => c.trim());
+    const appLink = telegramConfig.appLink || 'https://linktr.ee/seuapp';
+    const header = isUpdate ? "🔄 <b>NOVOS EPISÓDIOS DISPONÍVEIS!</b>" : "🎬 <b>NOVIDADE NO CATÁLOGO!</b>";
+
+    // O Telegram tem limite de 1024 caracteres na legenda. Vamos truncar a sinopse se for longa.
+    let safeSynopsis = synopsis || "Sem sinopse disponível.";
+    if (safeSynopsis.length > 500) safeSynopsis = safeSynopsis.substring(0, 497) + "...";
+
+    const caption = `${header}\n\n🍿 <b>${title}</b>\n\n📖 <i>${safeSynopsis}</i>\n\n📱 <a href="${appLink}">👉 Baixe nosso app aqui e assista!</a>`;
+
+    for (const chatId of channels) {
+        if (!chatId) continue;
+        try {
+            const url = `https://api.telegram.org/bot${telegramConfig.botToken}/sendPhoto`;
+            const payload = {
+                chat_id: chatId,
+                photo: imageUrl,
+                caption: caption,
+                parse_mode: 'HTML'
+            };
+
+            await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } catch (e) {
+            console.error("Erro ao enviar para Telegram no canal:", chatId, e);
+        }
+    }
+};
 
 window.sendPushNotification = async function(topic, title, body) {
     let webhookUrl = '';
@@ -191,12 +230,25 @@ window.sendInAppNotification = async function(uidList, title, message) {
 };
 
 function initNotificationsLogic() {
+    // Carrega Configuração Webhook Push
     getDoc(doc(db, 'config', 'fcm')).then(docSnap => {
         if (docSnap.exists() && docSnap.data().webhookUrl) {
             document.getElementById('notif-webhook-url').value = docSnap.data().webhookUrl;
         }
     });
 
+    // Carrega Configuração Telegram
+    getDoc(doc(db, 'config', 'telegram')).then(docSnap => {
+        if (docSnap.exists()) {
+            telegramConfig = docSnap.data();
+            if(document.getElementById('tg-bot-token')) document.getElementById('tg-bot-token').value = telegramConfig.botToken || '';
+            if(document.getElementById('tg-channels')) document.getElementById('tg-channels').value = telegramConfig.channels || '';
+            if(document.getElementById('tg-app-link')) document.getElementById('tg-app-link').value = telegramConfig.appLink || '';
+            if(document.getElementById('tg-active')) document.getElementById('tg-active').checked = telegramConfig.active || false;
+        }
+    });
+
+    // Salvar Webhook
     document.getElementById('webhook-form').onsubmit = async (e) => {
         e.preventDefault();
         const btn = document.getElementById('save-webhook-btn');
@@ -210,6 +262,30 @@ function initNotificationsLogic() {
         hideButtonSpinner(btn, 'Salvar Webhook');
     };
 
+    // Salvar Telegram (O Form será criado no index.html depois)
+    const tgForm = document.getElementById('telegram-form');
+    if(tgForm) {
+        tgForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('save-telegram-btn');
+            showButtonSpinner(btn);
+            try {
+                telegramConfig = {
+                    botToken: document.getElementById('tg-bot-token').value.trim(),
+                    channels: document.getElementById('tg-channels').value.trim(),
+                    appLink: document.getElementById('tg-app-link').value.trim(),
+                    active: document.getElementById('tg-active').checked
+                };
+                await setDoc(doc(db, 'config', 'telegram'), telegramConfig, { merge: true });
+                showToast("Configurações do Telegram salvas!");
+            } catch(err) {
+                showToast("Erro ao salvar Telegram.", true);
+            }
+            hideButtonSpinner(btn, 'Salvar Telegram');
+        };
+    }
+
+    // Disparo Global
     document.getElementById('global-notif-form').onsubmit = async (e) => {
         e.preventDefault();
         const btn = document.getElementById('send-global-notif-btn');
@@ -1231,7 +1307,7 @@ window.openEditPage = async (docId) => {
     }
 };
 
-// Salvar Adição
+// Salvar Adição (Adicionado Gatilho Telegram)
 document.getElementById('content-form').onsubmit = async (e) => {
     e.preventDefault(); const btn = document.getElementById('save-btn'); showButtonSpinner(btn);
     const type = document.getElementById('media-type').value;
@@ -1287,6 +1363,8 @@ document.getElementById('content-form').onsubmit = async (e) => {
         
         if (document.getElementById('notify-add').checked) {
             await window.sendPushNotification('all', 'Novo Lançamento! 🍿', `${contentData.title} acabou de chegar no catálogo. Vá conferir!`);
+            // Disparo Telegram Novo Conteúdo
+            await window.sendToTelegram(contentData.title, contentData.synopsis, contentData.poster, false);
         }
 
         showToast('Salvo com sucesso!'); 
@@ -1298,7 +1376,7 @@ document.getElementById('content-form').onsubmit = async (e) => {
     } catch(e) { showToast(e.message, true); } finally { hideButtonSpinner(btn, 'Salvar no Mango'); }
 };
 
-// Salvar Edição
+// Salvar Edição (Adicionado Gatilho Telegram)
 document.getElementById('edit-form').onsubmit = async (e) => {
     e.preventDefault(); const btn = document.getElementById('edit-save-btn'); showButtonSpinner(btn);
     const docId = document.getElementById('edit-doc-id').value; const type = document.getElementById('edit-media-type').value;
@@ -1343,6 +1421,11 @@ document.getElementById('edit-form').onsubmit = async (e) => {
         
         if (document.getElementById('notify-edit').checked) {
             await window.sendPushNotification(`content_${docId}`, 'Tem novidade! 📺', `${p.title} acaba de receber uma atualização!`);
+            
+            // Disparo Telegram Atualização
+            const currentItemInfo = catalogData.find(i => i.id === docId);
+            const synopsisToUse = currentItemInfo ? currentItemInfo.synopsis : 'Acesse o aplicativo para ver as novidades!';
+            await window.sendToTelegram(p.title, synopsisToUse, p.poster, true);
         }
 
         showToast('Editado com sucesso!'); setTimeout(()=>document.querySelector('.nav-link[data-page="manageContent"]').click(), 1000);
@@ -1459,7 +1542,6 @@ function initBadgeManagerLogic() {
 // LÓGICA DE GERAÇÃO AVANÇADA DE CARROSSEL COM IA
 // ==========================================
 function initCarouselLogic() {
-    // Carrega as chaves salvas do LocalStorage (se existirem)
     const savedGeminiKey = localStorage.getItem('mango_gemini_key');
     const savedGroqKey = localStorage.getItem('mango_groq_key');
     
@@ -1467,7 +1549,7 @@ function initCarouselLogic() {
     if(savedGroqKey && document.getElementById('groq-api-key')) document.getElementById('groq-api-key').value = savedGroqKey;
 
     const grid = document.getElementById('carousel-items-grid');
-    let pendingAiCarousels = []; // Variável temporária para armazenar as sugestões da IA antes de salvar
+    let pendingAiCarousels = []; 
     
     onSnapshot(collection(db, 'carousels'), (snapshot) => {
         carouselsData = [];
@@ -1555,7 +1637,6 @@ function initCarouselLogic() {
         document.getElementById('save-carousel-btn').querySelector('.button-text').textContent = "Salvar Novo Carrossel";
     }
 
-    // NOVA LÓGICA DE GERAÇÃO INTELIGENTE COM PREVIEW E MÚLTIPLOS MODELOS
     document.getElementById('generate-all-ai-btn').onclick = async () => {
         const aiModelElement = document.getElementById('ai-model-select');
         const aiModel = aiModelElement ? aiModelElement.value : 'gemini'; 
@@ -1609,7 +1690,6 @@ function initCarouselLogic() {
                 aiText = data.candidates[0].content.parts[0].text;
                 
             } else if (aiModel === 'groq') {
-                // Utilizando o modelo suportado ATUALIZADO da Groq: llama-3.3-70b-versatile
                 const res = await fetch(`https://api.groq.com/openai/v1/chat/completions`, {
                     method: 'POST',
                     headers: {
@@ -1647,7 +1727,6 @@ function initCarouselLogic() {
             
             console.log("Resposta bruta da IA:", aiText);
 
-            // Limpeza agressiva e segura do JSON
             const startIndex = aiText.indexOf('[');
             const endIndex = aiText.lastIndexOf(']');
             
@@ -1670,14 +1749,13 @@ function initCarouselLogic() {
             if (e.name === 'TypeError') {
                 showToast("Erro de Conexão ou CORS. Verifique sua chave da API.", true);
             } else {
-                showToast(e.message, true); // Agora o erro da Groq vai aparecer direto no Toast vermelho
+                showToast(e.message, true); 
             }
         } finally { 
             hideButtonSpinner(btn, 'Gerar Sugestões com IA'); 
         }
     };
 
-    // Renderiza a área de revisão das sugestões da IA
     window.renderAiPreview = function(carousels) {
         const container = document.getElementById('ai-carousel-preview-area');
         const list = document.getElementById('ai-carousel-suggestions-list');
@@ -1690,7 +1768,6 @@ function initCarouselLogic() {
             const div = document.createElement('div');
             div.className = "p-4 bg-black/40 rounded-xl border border-pink-500/30 mb-3";
             
-            // Puxa as capas dos animes para exibir na miniatura
             const imagesHtml = c.items.map(itemId => {
                 const catItem = catalogData.find(x => x.id === itemId);
                 if(catItem) return `<img src="${catItem.poster}" class="w-10 h-14 object-cover rounded shadow border border-slate-700" title="${escapeHTML(catItem.title)}">`;
@@ -1711,7 +1788,6 @@ function initCarouselLogic() {
         });
     };
 
-    // Botão final que pega o que você revisou e salva de verdade
     const saveSelectedBtn = document.getElementById('save-selected-ai-btn');
     if(saveSelectedBtn) {
         saveSelectedBtn.onclick = async (e) => {
@@ -1735,12 +1811,10 @@ function initCarouselLogic() {
                     });
                 });
 
-                // Deleta todos os carrosséis gerados por IA antigos
                 const oldDocs = await getDocs(query(collection(db, 'carousels'), where('isAiGenerated', '==', true)));
                 const deletePromises = oldDocs.docs.map(d => deleteDoc(doc(db, 'carousels', d.id)));
                 await Promise.all(deletePromises);
 
-                // Salva os novos escolhidos
                 const savePromises = finalCarousels.map(c => {
                     return addDoc(collection(db, 'carousels'), {
                         title: c.title,
@@ -1753,7 +1827,7 @@ function initCarouselLogic() {
 
                 showToast(`Sucesso! ${finalCarousels.length} novos carrosséis publicados no App.`);
                 document.getElementById('ai-carousel-preview-area').classList.add('hidden');
-                pendingAiCarousels = []; // Limpa o rascunho
+                pendingAiCarousels = []; 
             } catch (err) {
                 console.error(err);
                 showToast("Erro ao salvar os carrosséis.", true);
@@ -1763,7 +1837,6 @@ function initCarouselLogic() {
         };
     }
 
-    // Função interna caso o HTML ainda esteja desatualizado (Compatibilidade retroativa)
     async function saveAllPendingCarouselsDirectly(carouselsArray) {
         const oldDocs = await getDocs(query(collection(db, 'carousels'), where('isAiGenerated', '==', true)));
         const deletePromises = oldDocs.docs.map(d => deleteDoc(doc(db, 'carousels', d.id)));
@@ -1781,7 +1854,6 @@ function initCarouselLogic() {
         showToast(`A IA gerou ${carouselsArray.length} categorias com sucesso!`);
     }
 
-    // Lógica para salvar carrossel manualmente do Editor à direita
     document.getElementById('save-carousel-btn').onclick = async () => {
         const title = document.getElementById('carousel-title').value.trim();
         const selected = Array.from(document.querySelectorAll('.catalog-check:checked')).map(c => c.value);
@@ -2295,7 +2367,6 @@ function initBackgroundLogic() {
 function initVerticalBgLogic() {
     let currentVerticalUrls = [];
 
-    // Listeners para os Grupos Verticais Salvos
     onSnapshot(collection(db, 'vertical_bg_groups'), (snapshot) => {
         verticalGroupsData = [];
         snapshot.forEach(doc => verticalGroupsData.push({ id: doc.id, ...doc.data() }));
@@ -2325,7 +2396,6 @@ function initVerticalBgLogic() {
         });
     }
 
-    // Pesquisa TMDB
     document.getElementById('vertical-tmdb-search-btn').onclick = async () => {
         const q = document.getElementById('vertical-tmdb-search').value.trim();
         if(!q) return;
@@ -2357,7 +2427,6 @@ function initVerticalBgLogic() {
         }
     };
 
-    // Extrair Apenas Posters (Verticais) do TMDB
     async function fetchTmdbVerticalPosters(id, type, title) {
         document.getElementById('vertical-group-title').value = title;
         showToast("Carregando capas verticais...");
@@ -2376,7 +2445,6 @@ function initVerticalBgLogic() {
         }
     }
 
-    // Adicionar Manual
     document.getElementById('add-manual-vertical-btn').onclick = () => {
         const urlInput = document.getElementById('manual-vertical-url');
         const url = urlInput.value.trim();
@@ -2387,7 +2455,6 @@ function initVerticalBgLogic() {
         }
     }
 
-    // Renderizar Grid do Editor
     function renderVerticalEditorGrid() {
         const grid = document.getElementById('vertical-editor-grid');
         document.getElementById('vertical-count-badge').textContent = currentVerticalUrls.length;
@@ -2409,7 +2476,6 @@ function initVerticalBgLogic() {
         renderVerticalEditorGrid();
     }
 
-    // Editar Grupo Existente
     window.editVerticalGroup = function(id) {
         const g = verticalGroupsData.find(x => x.id === id);
         if (!g) return;
@@ -2420,7 +2486,6 @@ function initVerticalBgLogic() {
         document.getElementById('save-vertical-group-btn').querySelector('.button-text').textContent = "Atualizar Grupo";
     };
 
-    // Apagar Grupo
     window.deleteVerticalGroup = function(id) {
         showConfirm('Apagar Grupo', 'Deseja apagar este grupo de fundos verticais?', async () => {
             await deleteDoc(doc(db, 'vertical_bg_groups', id));
@@ -2429,7 +2494,6 @@ function initVerticalBgLogic() {
         });
     };
 
-    // Limpar Editor
     window.clearVerticalEdit = function() {
         document.getElementById('vertical-group-id').value = '';
         document.getElementById('vertical-group-title').value = '';
@@ -2440,7 +2504,6 @@ function initVerticalBgLogic() {
         document.getElementById('save-vertical-group-btn').querySelector('.button-text').textContent = "Salvar Grupo Vertical";
     }
 
-    // Salvar no Firestore
     document.getElementById('save-vertical-group-btn').onclick = async () => {
         const title = document.getElementById('vertical-group-title').value.trim();
         const id = document.getElementById('vertical-group-id').value;
@@ -2466,7 +2529,6 @@ function initVerticalBgLogic() {
 // LÓGICA DE ATUALIZAÇÃO DO APP (O CÉREBRO)
 // ==========================================
 function initUpdateLogic() {
-    // Função JS para comparar as versões em formato texto
     function compareVersions(v1, v2) {
         const parts1 = String(v1).split('.').map(Number);
         const parts2 = String(v2).split('.').map(Number);
@@ -2480,17 +2542,12 @@ function initUpdateLogic() {
         return 0;
     }
 
-    // Arrays para armazenar o histórico
     let updatesHistory = [];
 
-    // Escuta a coleção inteira de atualizações para montar o histórico
     onSnapshot(collection(db, 'app_updates'), (snapshot) => {
         updatesHistory = [];
         snapshot.forEach(doc => updatesHistory.push({ id: doc.id, ...doc.data() }));
-        
-        // Ordenar por versão da maior para menor com o comparador inteligente
         updatesHistory.sort((a, b) => compareVersions(b.version, a.version));
-        
         renderUpdateHistory(updatesHistory);
     });
 
@@ -2503,7 +2560,7 @@ function initUpdateLogic() {
         }
         
         history.forEach((u, index) => {
-            const isLatest = index === 0; // O primeiro da lista é o mais recente
+            const isLatest = index === 0;
             const div = document.createElement('div');
             div.className = "p-4 bg-black/30 rounded-xl border border-slate-700 mb-3 transition hover:bg-slate-800";
             div.innerHTML = `
@@ -2523,7 +2580,6 @@ function initUpdateLogic() {
         });
     }
 
-    // Excluir atualização
     window.deleteUpdate = function(id) {
         showConfirm('Apagar Histórico', 'Deseja apagar este registro de atualização? (Se apagar a mais recente, os usuários pararão de receber o aviso).', async () => {
             await deleteDoc(doc(db, 'app_updates', id));
@@ -2531,7 +2587,6 @@ function initUpdateLogic() {
         });
     };
 
-    // Salvar a nova atualização como um NOVO documento
     document.getElementById('save-update-btn').onclick = async () => {
         const version = document.getElementById('update-version').value.trim();
         const link = document.getElementById('update-link').value.trim();
@@ -2542,14 +2597,12 @@ function initUpdateLogic() {
             return showToast("Preencha todos os campos da atualização.", true);
         }
         
-        // Validação inteligente de versão: A nova versão tem de ser estritamente maior
         if (updatesHistory.length > 0 && compareVersions(version, updatesHistory[0].version) <= 0) {
             return showToast(`A versão deve ser maior que ${updatesHistory[0].version}!`, true);
         }
 
         showButtonSpinner(btn);
         try {
-            // Adiciona um novo documento na coleção de atualizações guardando como String
             await addDoc(collection(db, 'app_updates'), { 
                 version: version, 
                 link: link, 
@@ -2557,12 +2610,10 @@ function initUpdateLogic() {
                 createdAt: serverTimestamp()
             });
             
-            // Dispara a Notificação de App Update caso configurado
             await window.sendPushNotification("all", "Temos uma Nova Atualização! 🚀", `A versão ${version} já está disponível para baixar no aplicativo.`);
 
             showToast(`Versão ${version} publicada! Os apps vão detectar isso em breve.`);
             
-            // Limpar form
             document.getElementById('update-version').value = '';
             document.getElementById('update-link').value = '';
             document.getElementById('update-notes').value = '';
@@ -2585,7 +2636,6 @@ window.startUpdateScan = async function() {
     const resultsDiv = document.getElementById('radar-results-list');
     const progressText = document.getElementById('radar-progress');
 
-    // Filtra apenas séries (filmes não têm episódios semanais)
     const tvShows = catalogData.filter(c => c.type === 'tv');
     
     if (tvShows.length === 0) {
@@ -2599,7 +2649,6 @@ window.startUpdateScan = async function() {
 
     progressText.textContent = `Analisando 0 de ${tvShows.length} séries...`;
 
-    // Fazemos um loop em série (for) em vez de Promise.all para não estourar o limite de requisições da API do TMDB
     for (let i = 0; i < tvShows.length; i++) {
         const show = tvShows[i];
         progressText.textContent = `Buscando dados: ${i + 1}/${tvShows.length} (${show.title})...`;
@@ -2608,13 +2657,11 @@ window.startUpdateScan = async function() {
             const tmdbData = await fetchTMDB(`tv/${show.tmdb_id}`);
             if (!tmdbData) continue;
 
-            // Conta quantos episódios temos salvos localmente (Ignorando Temporada 0 - Especiais e Contando apenas preenchidos)
             let localEpCount = 0;
             if (show.seasons) {
                 Object.entries(show.seasons).forEach(([key, s]) => {
                     const sNum = parseInt(s.tmdbSeason !== undefined ? s.tmdbSeason : key);
                     if (sNum > 0 && s.episodes) {
-                        // Filtra para contar APENAS episódios que têm o Link Padrão, Link Alternativo ou estão "Em Breve"
                         const validEps = s.episodes.filter(ep => 
                             (ep.url && ep.url.trim() !== '') || 
                             (ep.altUrl && ep.altUrl.trim() !== '') || 
@@ -2625,8 +2672,6 @@ window.startUpdateScan = async function() {
                 });
             }
 
-            // A API do TMDB retorna o 'number_of_episodes' total já lançados
-            // Calculamos manualmente pelas temporadas para IGNORAR a Temporada 0 (Especiais)
             let tmdbEpCount = 0;
             if (tmdbData.seasons) {
                 tmdbData.seasons.forEach(s => {
@@ -2638,7 +2683,6 @@ window.startUpdateScan = async function() {
                 tmdbEpCount = tmdbData.number_of_episodes || 0;
             }
 
-            // Se o TMDB tem mais episódios que o nosso BD local, é uma atualização!
             if (tmdbEpCount > localEpCount) {
                 foundUpdates++;
                 const diff = tmdbEpCount - localEpCount;
@@ -2683,20 +2727,14 @@ window.startUpdateScan = async function() {
 };
 
 window.handleQuickUpdate = async function(docId) {
-    // 1. Vai para a aba de Edição e carrega os dados da série
     await window.openEditPage(docId);
-    
-    // 2. Aguarda a interface do editor renderizar (o openEditPage faz fetch do TMDB)
     showToast("Buscando novos episódios automaticamente...");
     
-    // Usamos um pequeno timeout para garantir que o DOM dos episódios foi gerado
     setTimeout(() => {
         const syncBtn = document.querySelector('#edit-seasons-episodes-container button[onclick*="syncTmdbEpisodes"]');
         if (syncBtn) {
-            // 3. Simula o clique no botão "Atualizar Novos Episódios" da aba de edição
             syncBtn.click();
             
-            // Rola a tela para baixo para ver as novas temporadas/episódios
             setTimeout(() => {
                 const editForm = document.getElementById('edit-form');
                 editForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2710,7 +2748,6 @@ window.startBulkAgeRatingUpdate = async function() {
     const resultsDiv = document.getElementById('bulk-results-list');
     const progressText = document.getElementById('bulk-progress-text');
 
-    // Pega itens que NÃO tem ageRating definido
     const missingItems = catalogData.filter(c => !c.ageRating || c.ageRating.trim() === '');
     
     if (missingItems.length === 0) {
@@ -2732,11 +2769,9 @@ window.startBulkAgeRatingUpdate = async function() {
             try {
                 const rating = await fetchTmdbAgeRating(item.tmdb_id, item.type);
                 
-                // Atualiza no Firebase
                 await updateDoc(doc(db, 'content', item.id), { ageRating: rating });
                 successCount++;
 
-                // Adiciona UI feedback
                 const div = document.createElement('div');
                 div.className = 'flex items-center gap-3 p-3 bg-black/50 rounded-xl border border-yellow-500/30';
                 div.innerHTML = `
@@ -2747,7 +2782,7 @@ window.startBulkAgeRatingUpdate = async function() {
                     </div>
                     <div class="bg-yellow-500/20 p-2 rounded-full"><svg class="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>
                 `;
-                resultsDiv.prepend(div); // Coloca em cima
+                resultsDiv.prepend(div); 
             } catch (e) {
                 console.error("Erro ao atualizar o item", item.title, e);
             }
@@ -2783,7 +2818,6 @@ function initAchievementsLogic() {
             return;
         }
 
-        // Ordenar por nível de dificuldade
         achievementsData.sort((a, b) => (a.difficultyLevel || 1) - (b.difficultyLevel || 1));
         
         achievementsData.forEach(ach => {
@@ -2894,7 +2928,6 @@ function initAchievementsLogic() {
         }
     };
 
-    // Lógica do Gerador IA de Conquistas
     document.getElementById('generate-achievements-ai-btn').onclick = async () => {
         let key = localStorage.getItem('mango_gemini_key');
         if(!key) {
@@ -2947,7 +2980,6 @@ function initAchievementsLogic() {
             
             if (!Array.isArray(newAchievements) || newAchievements.length === 0) throw new Error("Resposta inválida da IA.");
 
-            // Salva no Firestore
             const savePromises = newAchievements.map(ach => {
                 let color = "10B981"; // Verde (Lvl 1)
                 if(ach.difficultyLevel == 2) color = "3B82F6"; // Azul
