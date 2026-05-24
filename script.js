@@ -143,7 +143,6 @@ async function fetchTmdbAgeRating(id, type) {
 // SISTEMA DE NOTIFICAÇÕES (IN-APP, PUSH E TELEGRAM)
 // ==========================================
 
-// NOVA FUNÇÃO: Disparo para o Telegram
 window.sendToTelegram = async function(title, synopsis, imageUrl, isUpdate = false) {
     if (!telegramConfig.active || !telegramConfig.botToken || !telegramConfig.channels) return;
 
@@ -151,7 +150,6 @@ window.sendToTelegram = async function(title, synopsis, imageUrl, isUpdate = fal
     const appLink = telegramConfig.appLink || 'https://linktr.ee/seuapp';
     const header = isUpdate ? "🔄 <b>NOVOS EPISÓDIOS DISPONÍVEIS!</b>" : "🎬 <b>NOVIDADE NO CATÁLOGO!</b>";
 
-    // O Telegram tem limite de 1024 caracteres na legenda. Vamos truncar a sinopse se for longa.
     let safeSynopsis = synopsis || "Sem sinopse disponível.";
     if (safeSynopsis.length > 500) safeSynopsis = safeSynopsis.substring(0, 497) + "...";
 
@@ -230,14 +228,12 @@ window.sendInAppNotification = async function(uidList, title, message) {
 };
 
 function initNotificationsLogic() {
-    // Carrega Configuração Webhook Push
     getDoc(doc(db, 'config', 'fcm')).then(docSnap => {
         if (docSnap.exists() && docSnap.data().webhookUrl) {
             document.getElementById('notif-webhook-url').value = docSnap.data().webhookUrl;
         }
     });
 
-    // Carrega Configuração Telegram
     getDoc(doc(db, 'config', 'telegram')).then(docSnap => {
         if (docSnap.exists()) {
             telegramConfig = docSnap.data();
@@ -248,7 +244,6 @@ function initNotificationsLogic() {
         }
     });
 
-    // Salvar Webhook
     document.getElementById('webhook-form').onsubmit = async (e) => {
         e.preventDefault();
         const btn = document.getElementById('save-webhook-btn');
@@ -262,7 +257,6 @@ function initNotificationsLogic() {
         hideButtonSpinner(btn, 'Salvar Webhook');
     };
 
-    // Salvar Telegram (O Form será criado no index.html depois)
     const tgForm = document.getElementById('telegram-form');
     if(tgForm) {
         tgForm.onsubmit = async (e) => {
@@ -285,7 +279,6 @@ function initNotificationsLogic() {
         };
     }
 
-    // Disparo Global
     document.getElementById('global-notif-form').onsubmit = async (e) => {
         e.preventDefault();
         const btn = document.getElementById('send-global-notif-btn');
@@ -635,17 +628,28 @@ function createEpisodeRow(episodeNumber, episodeName = '', episodeOverview = '',
         <button type="button" class="remove-episode-btn flex-shrink-0 bg-red-600/50 hover:bg-red-600/80 p-2 rounded-md leading-none transition"><svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
     </div>
     <div class="pt-2 border-t border-slate-700/50 space-y-2">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div><label class="block text-xs font-medium text-slate-400 mb-1">URL (Padrão/Dub)</label><input type="url" class="episode-url w-full p-2 glass-input rounded-md text-sm ${(!existingUrl && !existingAltUrl && !isComingSoon) ? 'missing-link' : ''}" value="${escapeHTML(existingUrl)}"></div>
             <div><label class="block text-xs font-medium text-indigo-400 mb-1">URL (Alternativo/Leg)</label><input type="url" class="episode-alt-url w-full p-2 glass-input border-indigo-500/50 rounded-md text-sm" placeholder="Opcional..." value="${escapeHTML(existingAltUrl)}"></div>
+            <div><label class="block text-xs font-medium text-emerald-400 mb-1">URL da Capa (Manual)</label><input type="url" class="episode-still-path w-full p-2 glass-input border-emerald-500/50 rounded-md text-sm" placeholder="URL da imagem..." value="${displayUrl.includes('placehold') ? '' : escapeHTML(displayUrl)}"></div>
         </div>
         <div class="flex items-center gap-2 mt-2"><input type="checkbox" class="episode-coming-soon w-4 h-4 rounded text-pink-500" ${isComingSoon ? 'checked' : ''}><label class="text-xs text-pink-400 font-bold select-none cursor-pointer">Em Breve</label></div>
-        <input type="hidden" class="episode-still-path" value="${displayUrl.includes('placehold') ? '' : escapeHTML(displayUrl)}">
         <input type="hidden" class="episode-overview" value="${escapeHTML(episodeOverview || '')}">
     </div>`;
     
     row.querySelector('.remove-episode-btn').onclick = () => showConfirm('Remover Episódio', 'Tem certeza?', () => row.remove());
-    const urlInp = row.querySelector('.episode-url'), altUrlInp = row.querySelector('.episode-alt-url'), chk = row.querySelector('.episode-coming-soon');
+    
+    const urlInp = row.querySelector('.episode-url');
+    const altUrlInp = row.querySelector('.episode-alt-url');
+    const chk = row.querySelector('.episode-coming-soon');
+    const stillInp = row.querySelector('.episode-still-path');
+    const imgEl = row.querySelector('img');
+
+    // Ao digitar uma URL de capa, atualiza a imagem em tempo real
+    stillInp.oninput = () => {
+        imgEl.src = stillInp.value || 'https://placehold.co/120x67/1c1917/999999?text=EP';
+    };
+
     const upd = () => { 
         if(!!urlInp.value.trim() || !!altUrlInp.value.trim() || chk.checked) { 
             row.classList.add('filled'); 
@@ -700,8 +704,8 @@ window.syncTmdbEpisodes = async function(listId, tmdbIdInputId) {
                 const validEps = seasonData.episodes.filter(ep => {
                     const airDate = ep.air_date ? new Date(ep.air_date) : null;
                     const hasAired = airDate && airDate <= today;
-                    const isGenericName = ep.name && (ep.name.toLowerCase().startsWith('episode') || ep.name.toLowerCase().startsWith('episódio'));
-                    const hasInfo = ep.still_path || ep.overview || !isGenericName;
+                    // Se o TMDB tiver informações básicas para montar um episódio, nós pegamos
+                    const hasInfo = ep.still_path || ep.overview || ep.name;
                     return hasAired || hasInfo;
                 });
 
@@ -722,8 +726,7 @@ window.syncTmdbEpisodes = async function(listId, tmdbIdInputId) {
 
                 const airDate = tmdbEp.air_date ? new Date(tmdbEp.air_date) : null;
                 const hasAired = airDate && airDate <= today;
-                const isGenericName = tmdbEp.name && (tmdbEp.name.toLowerCase().startsWith('episode') || tmdbEp.name.toLowerCase().startsWith('episódio'));
-                const hasInfo = tmdbEp.still_path || tmdbEp.overview || !isGenericName;
+                const hasInfo = tmdbEp.still_path || tmdbEp.overview || tmdbEp.name;
 
                 if (existingRowsMap.has(uniqueId)) {
                     const row = existingRowsMap.get(uniqueId);
@@ -734,21 +737,29 @@ window.syncTmdbEpisodes = async function(listId, tmdbIdInputId) {
 
                     let updated = false;
 
-                    if ((titleInput.value.trim() === '' || titleInput.value.toLowerCase().startsWith('episódio') || titleInput.value.toLowerCase().startsWith('episode')) && tmdbEp.name && !isGenericName) {
-                        titleInput.value = tmdbEp.name;
-                        updated = true;
+                    if (tmdbEp.name) {
+                        // Sempre atualiza o nome se o TMDB tiver um nome válido, garantindo que fique igual
+                        if (titleInput.value !== tmdbEp.name) {
+                            titleInput.value = tmdbEp.name;
+                            updated = true;
+                        }
                     }
 
-                    if (!overviewInput.value.trim() && tmdbEp.overview) {
+                    if (tmdbEp.overview && !overviewInput.value.trim()) {
                         overviewInput.value = tmdbEp.overview;
                         updated = true;
                     }
 
-                    if ((!stillInput.value || stillInput.value.includes('placehold')) && tmdbEp.still_path) {
+                    if (tmdbEp.still_path) {
                         const url = `https://image.tmdb.org/t/p/w300${tmdbEp.still_path}`;
-                        stillInput.value = url;
-                        imgEl.src = url;
-                        updated = true;
+                        // Atualiza a imagem se estiver vazia, for placeholder ou for link antigo do tmdb
+                        if (!stillInput.value || stillInput.value.includes('placehold') || stillInput.value.includes('tmdb.org')) {
+                            if (stillInput.value !== url) {
+                                stillInput.value = url;
+                                imgEl.src = url;
+                                updated = true;
+                            }
+                        }
                     }
 
                     if(updated) updatedCount++;
@@ -778,7 +789,7 @@ window.syncTmdbEpisodes = async function(listId, tmdbIdInputId) {
 
         window.initializeGlassEffects();
         if (addedCount > 0 || addedSeasonsCount > 0 || updatedCount > 0) {
-            showToast(`Varredura TMDB: ${addedSeasonsCount} abas criadas, ${addedCount} episódios adicionados, ${updatedCount} preenchidos!`);
+            showToast(`Varredura TMDB: ${addedSeasonsCount} abas criadas, ${addedCount} episódios adicionados, ${updatedCount} atualizados/preenchidos!`);
         } else {
             showToast("Tudo certo! O catálogo local já está igualzinho ao TMDB.");
         }
@@ -987,8 +998,7 @@ window.handleAddSeasonClick = async function(seasonNum, btnElement, isEdit, tmdb
     const validEps = seasonData.episodes.filter(ep => {
         const airDate = ep.air_date ? new Date(ep.air_date) : null;
         const hasAired = airDate && airDate <= today;
-        const isGenericName = ep.name && (ep.name.toLowerCase().startsWith('episode') || ep.name.toLowerCase().startsWith('episódio'));
-        const hasInfo = ep.still_path || ep.overview || !isGenericName;
+        const hasInfo = ep.still_path || ep.overview || ep.name;
         return hasAired || hasInfo;
     });
 
