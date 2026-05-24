@@ -704,8 +704,8 @@ window.syncTmdbEpisodes = async function(listId, tmdbIdInputId) {
                 const validEps = seasonData.episodes.filter(ep => {
                     const airDate = ep.air_date ? new Date(ep.air_date) : null;
                     const hasAired = airDate && airDate <= today;
-                    // Se o TMDB tiver informações básicas para montar um episódio, nós pegamos
-                    const hasInfo = ep.still_path || ep.overview || ep.name;
+                    const isGenericName = ep.name && (ep.name.toLowerCase().startsWith('episode') || ep.name.toLowerCase().startsWith('episódio') || ep.name.toLowerCase().startsWith('ep '));
+                    const hasInfo = ep.still_path || (ep.overview && ep.overview.trim() !== '') || !isGenericName;
                     return hasAired || hasInfo;
                 });
 
@@ -726,7 +726,8 @@ window.syncTmdbEpisodes = async function(listId, tmdbIdInputId) {
 
                 const airDate = tmdbEp.air_date ? new Date(tmdbEp.air_date) : null;
                 const hasAired = airDate && airDate <= today;
-                const hasInfo = tmdbEp.still_path || tmdbEp.overview || tmdbEp.name;
+                const isGenericName = tmdbEp.name && (tmdbEp.name.toLowerCase().startsWith('episode') || tmdbEp.name.toLowerCase().startsWith('episódio') || tmdbEp.name.toLowerCase().startsWith('ep '));
+                const hasInfo = tmdbEp.still_path || (tmdbEp.overview && tmdbEp.overview.trim() !== '') || !isGenericName;
 
                 if (existingRowsMap.has(uniqueId)) {
                     const row = existingRowsMap.get(uniqueId);
@@ -737,8 +738,8 @@ window.syncTmdbEpisodes = async function(listId, tmdbIdInputId) {
 
                     let updated = false;
 
-                    if (tmdbEp.name) {
-                        // Sempre atualiza o nome se o TMDB tiver um nome válido, garantindo que fique igual
+                    if (tmdbEp.name && !isGenericName) {
+                        // Sempre atualiza o nome se o TMDB tiver um nome válido e não genérico
                         if (titleInput.value !== tmdbEp.name) {
                             titleInput.value = tmdbEp.name;
                             updated = true;
@@ -998,7 +999,8 @@ window.handleAddSeasonClick = async function(seasonNum, btnElement, isEdit, tmdb
     const validEps = seasonData.episodes.filter(ep => {
         const airDate = ep.air_date ? new Date(ep.air_date) : null;
         const hasAired = airDate && airDate <= today;
-        const hasInfo = ep.still_path || ep.overview || ep.name;
+        const isGenericName = ep.name && (ep.name.toLowerCase().startsWith('episode') || ep.name.toLowerCase().startsWith('episódio') || ep.name.toLowerCase().startsWith('ep '));
+        const hasInfo = ep.still_path || (ep.overview && ep.overview.trim() !== '') || !isGenericName;
         return hasAired || hasInfo;
     });
 
@@ -2682,20 +2684,35 @@ window.startUpdateScan = async function() {
                 });
             }
 
-            let tmdbEpCount = 0;
+            let validTmdbEpCount = 0;
             if (tmdbData.seasons) {
-                tmdbData.seasons.forEach(s => {
+                // Ao invés de usar o count superficial que pode incluir vazios futuros
+                // Buscamos e filtramos usando a mesma regra de adição oficial
+                for (let s of tmdbData.seasons) {
                     if (s.season_number > 0) {
-                        tmdbEpCount += (s.episode_count || 0);
+                        const seasonData = await fetchTMDB(`tv/${show.tmdb_id}/season/${s.season_number}`);
+                        if (seasonData && seasonData.episodes) {
+                            const today = new Date();
+                            const validEps = seasonData.episodes.filter(ep => {
+                                const airDate = ep.air_date ? new Date(ep.air_date) : null;
+                                const hasAired = airDate && airDate <= today;
+                                const isGenericName = ep.name && (ep.name.toLowerCase().startsWith('episode') || ep.name.toLowerCase().startsWith('episódio') || ep.name.toLowerCase().startsWith('ep '));
+                                const hasInfo = ep.still_path || (ep.overview && ep.overview.trim() !== '') || !isGenericName;
+                                return hasAired || hasInfo;
+                            });
+                            validTmdbEpCount += validEps.length;
+                        } else {
+                            validTmdbEpCount += (s.episode_count || 0); // fallback
+                        }
                     }
-                });
+                }
             } else {
-                tmdbEpCount = tmdbData.number_of_episodes || 0;
+                validTmdbEpCount = tmdbData.number_of_episodes || 0;
             }
 
-            if (tmdbEpCount > localEpCount) {
+            if (validTmdbEpCount > localEpCount) {
                 foundUpdates++;
-                const diff = tmdbEpCount - localEpCount;
+                const diff = validTmdbEpCount - localEpCount;
                 
                 const div = document.createElement('div');
                 div.className = 'flex items-start gap-4 p-4 bg-black/50 rounded-xl border border-emerald-500/30 hover:border-emerald-500 transition-colors group relative overflow-hidden';
@@ -2707,7 +2724,7 @@ window.startUpdateScan = async function() {
                     <div class="flex-1 min-w-0 flex flex-col h-full justify-between">
                         <div>
                             <h4 class="font-bold text-white truncate text-base mb-1" title="${escapeHTML(show.title)}">${escapeHTML(show.title)}</h4>
-                            <p class="text-xs text-slate-400 mb-2">Temos: ${localEpCount} | TMDB: <span class="text-emerald-400 font-bold">${tmdbEpCount}</span></p>
+                            <p class="text-xs text-slate-400 mb-2">Temos: ${localEpCount} | TMDB: <span class="text-emerald-400 font-bold">${validTmdbEpCount}</span></p>
                         </div>
                         <button onclick="handleQuickUpdate('${show.id}')" class="glass-button w-full rounded-lg py-1.5 text-xs" style="--bg-color: rgba(16, 185, 129, 0.7);">
                             <div class="glass-content text-white font-bold">⚙️ Adicionar Agora</div>
