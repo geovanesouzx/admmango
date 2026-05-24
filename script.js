@@ -542,7 +542,7 @@ window.deleteRequest = function(id) {
 };
 
 window.goToAddFromRequest = function(tmdbId, mediaType) {
-    document.querySelector('.nav-link[data-page="addContent"]').click();
+    window.location.hash = 'addContent';
     window.selectItem(tmdbId, mediaType);
 };
 
@@ -1199,10 +1199,7 @@ window.openEditPage = async (docId) => {
     const item = catalogData.find(i => i.id === docId);
     if (!item) return;
 
-    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-    document.querySelectorAll('.content-page').forEach(p => p.classList.remove('active'));
-    document.getElementById('editContentPage').classList.add('active');
-
+    window.location.hash = 'editContentPage';
     document.getElementById('edit-title-header').textContent = `Editando...`;
     document.getElementById('edit-doc-id').value = item.id;
     document.getElementById('edit-media-type').value = item.type;
@@ -1440,7 +1437,7 @@ document.getElementById('edit-form').onsubmit = async (e) => {
             await window.sendToTelegram(p.title, synopsisToUse, p.poster, true);
         }
 
-        showToast('Editado com sucesso!'); setTimeout(()=>document.querySelector('.nav-link[data-page="manageContent"]').click(), 1000);
+        showToast('Editado com sucesso!'); setTimeout(()=> { window.location.hash = 'manageContent'; }, 1000);
     } catch(e) { showToast(e.message, true); } finally { hideButtonSpinner(btn, 'Salvar Alterações'); }
 };
 
@@ -3042,6 +3039,33 @@ function initAchievementsLogic() {
 
 // Inicialização principal da aplicação
 document.addEventListener('DOMContentLoaded', () => {
+    // FUNÇÃO PRINCIPAL DE ROTEAMENTO (Navegação via Link/Hash)
+    function navigateTo(pageId) {
+        document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+        document.querySelectorAll('.content-page').forEach(p => p.classList.remove('active'));
+
+        const link = document.querySelector(`.nav-link[data-page="${pageId}"]`);
+        const page = document.getElementById(pageId);
+
+        if (link && link.closest('#sidebar-nav')) {
+            link.classList.add('active');
+        }
+        
+        if (page) {
+            page.classList.add('active');
+        } else {
+            // Fallback caso a rota não exista
+            document.querySelector('.nav-link[data-page="addContent"]')?.classList.add('active');
+            document.getElementById('addContent')?.classList.add('active');
+        }
+    }
+
+    // Ouvinte que dispara sempre que a rota/hash (#) na URL muda (como ao clicar no botão "Voltar" do navegador)
+    window.addEventListener('hashchange', () => {
+        const pageId = window.location.hash.substring(1) || 'addContent';
+        navigateTo(pageId);
+    });
+
     onAuthStateChanged(auth, (user) => {
         const mainApp = document.getElementById('main-app-container');
         if (user) {
@@ -3064,15 +3088,18 @@ document.addEventListener('DOMContentLoaded', () => {
             initNotificationsLogic(); 
             initAchievementsLogic(); 
 
+            // Ao entrar, verifica se já existe uma rota na URL para carregar direto nela
+            const initialPage = window.location.hash.substring(1) || 'addContent';
+            navigateTo(initialPage);
+
+            // Transforma os cliques nos menus para mudar a rota (#) ao invés de apenas trocar a classe CSS
             document.querySelectorAll('.nav-link').forEach(l => {
                 l.addEventListener('click', (e) => {
                     e.preventDefault();
-                    document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
-                    document.querySelectorAll('.content-page').forEach(p => p.classList.remove('active'));
-                    if(l.closest('#sidebar-nav')) l.classList.add('active');
-                    document.getElementById(l.dataset.page).classList.add('active');
+                    window.location.hash = l.dataset.page; // Isso dispara o 'hashchange' automaticamente
                 });
             });
+            
             document.getElementById('logout-btn').onclick = () => signOut(auth).then(() => window.location.reload());
         } else {
             mainApp.classList.add('opacity-0');
