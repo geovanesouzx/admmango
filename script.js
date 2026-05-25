@@ -559,13 +559,15 @@ window.openTmdbImages = async function(mode) {
     const loading = document.getElementById('images-loading');
     const postersGrid = document.getElementById('tmdb-posters-grid');
     const backdropsGrid = document.getElementById('tmdb-backdrops-grid');
+    const logosGrid = document.getElementById('tmdb-logos-grid');
 
     modal.classList.remove('hidden');
     loading.classList.remove('hidden');
     postersGrid.innerHTML = '';
     backdropsGrid.innerHTML = '';
+    if(logosGrid) logosGrid.innerHTML = '';
 
-    const data = await fetchTMDB(`${type}/${tmdbId}/images`, 'include_image_language=pt,en,null');
+    const data = await fetchTMDB(`${type}/${tmdbId}/images`, 'include_image_language=pt-BR,pt,en,null');
     loading.classList.add('hidden');
 
     if (data) {
@@ -592,6 +594,20 @@ window.openTmdbImages = async function(mode) {
             };
             backdropsGrid.appendChild(div);
         });
+
+        if(logosGrid) {
+            (data.logos || []).slice(0, 15).forEach(img => {
+                const url = `https://image.tmdb.org/t/p/original${img.file_path}`;
+                const div = document.createElement('div');
+                div.innerHTML = `<img src="${url}" class="w-full object-contain rounded-lg image-selector-img bg-slate-800 p-2" style="max-height: 80px;">`;
+                div.onclick = () => {
+                    document.getElementById(mode === 'add' ? 'custom-logo' : 'edit-custom-logo').value = url;
+                    modal.classList.add('hidden');
+                    showToast('Logo atualizado com sucesso!');
+                };
+                logosGrid.appendChild(div);
+            });
+        }
     } else {
         postersGrid.innerHTML = '<p class="text-white">Nenhuma imagem encontrada.</p>';
     }
@@ -1133,8 +1149,9 @@ window.selectItem = async (id, type) => {
     document.getElementById('details-form-container').classList.remove('hidden');
     document.getElementById('tmdb-details').innerHTML = '<div class="spinner-lg mx-auto mt-4"></div>';
     
+    // FETCH ATUALIZADO: Traz as imagens junto com os dados da série/filme
     const [data, ageRating] = await Promise.all([
-        fetchTMDB(`${type}/${id}`),
+        fetchTMDB(`${type}/${id}`, 'append_to_response=images&include_image_language=pt-BR,pt,en,null'),
         fetchTmdbAgeRating(id, type)
     ]);
     
@@ -1153,6 +1170,16 @@ function renderForm(data, mediaType, ageRating = '14') {
     
     document.getElementById('custom-poster').value = data.poster_path ? `${TMDB_IMG_URL}${data.poster_path}` : '';
     document.getElementById('custom-backdrop').value = data.backdrop_path ? `https://image.tmdb.org/t/p/original${data.backdrop_path}` : '';
+
+    // NOVO: Capturar Logo
+    let logoUrl = '';
+    if (data.images && data.images.logos && data.images.logos.length > 0) {
+        logoUrl = `https://image.tmdb.org/t/p/original${data.images.logos[0].file_path}`;
+    }
+    // Verifica se o input custom-logo existe na tela e preenche
+    if(document.getElementById('custom-logo')) {
+        document.getElementById('custom-logo').value = logoUrl;
+    }
 
     document.getElementById('tmdb-details').innerHTML = `<img src="${TMDB_IMG_URL}${data.poster_path}" class="w-28 h-40 object-cover rounded-xl border-2 border-slate-700"><div class="flex-1"><h2 class="text-3xl font-black text-white">${data.name||data.title}</h2><p class="text-amber-500 font-bold text-sm mb-2">${mediaType === 'tv'?'Série':'Filme'}</p><p class="text-slate-300 text-sm line-clamp-3">${data.overview||'Sem sinopse'}</p></div>`;
     
@@ -1240,6 +1267,11 @@ window.openEditPage = async (docId) => {
 
     document.getElementById('edit-custom-poster').value = item.poster || '';
     document.getElementById('edit-custom-backdrop').value = item.backdrop || '';
+
+    // NOVO: Carregar Logo salvo
+    if(document.getElementById('edit-custom-logo')) {
+        document.getElementById('edit-custom-logo').value = item.logo || '';
+    }
 
     const urlContainer = document.getElementById('edit-url-container');
     const list = document.getElementById('edit-seasons-list');
@@ -1334,6 +1366,7 @@ document.getElementById('content-form').onsubmit = async (e) => {
         tmdb_id: tmdbData.id, 
         poster: document.getElementById('custom-poster').value, 
         backdrop: document.getElementById('custom-backdrop').value, 
+        logo: document.getElementById('custom-logo') ? document.getElementById('custom-logo').value : '', // NOVO
         synopsis: tmdbData.overview||'', 
         year: (tmdbData.first_air_date||tmdbData.release_date||'').substring(0,4), 
         genres: (tmdbData.genres||[]).map(g=>g.name), 
@@ -1382,6 +1415,8 @@ document.getElementById('content-form').onsubmit = async (e) => {
         document.getElementById('search-query').value = '';
         document.getElementById('add-badge-text').value = '';
         document.getElementById('add-badge-expiration').value = '';
+        // NOVO: Limpa o input do logo se existir
+        if(document.getElementById('custom-logo')) document.getElementById('custom-logo').value = '';
     } catch(e) { showToast(e.message, true); } finally { hideButtonSpinner(btn, 'Salvar no Mango'); }
 };
 
@@ -1400,6 +1435,7 @@ document.getElementById('edit-form').onsubmit = async (e) => {
             updatedAt: serverTimestamp(),
             poster: document.getElementById('edit-custom-poster').value,
             backdrop: document.getElementById('edit-custom-backdrop').value,
+            logo: document.getElementById('edit-custom-logo') ? document.getElementById('edit-custom-logo').value : '', // NOVO
             badgeText: document.getElementById('edit-badge-text').value,
             badgeExpiration: editBadgeExpiration
         };
@@ -2816,6 +2852,68 @@ window.startBulkAgeRatingUpdate = async function() {
         hideButtonSpinner(btn, '⚡ Iniciar Novamente');
         window.initializeGlassEffects();
         showToast(`Processo finalizado! ${successCount} itens atualizados.`);
+    });
+};
+
+window.startBulkLogoUpdate = async function() {
+    const btn = document.getElementById('start-bulk-logos-btn');
+    const resultsDiv = document.getElementById('bulk-logos-results-list');
+    const progressText = document.getElementById('bulk-logos-progress-text');
+
+    // Filtra itens que NÃO possuem a chave logo ou que a URL está vazia
+    const missingItems = catalogData.filter(c => !c.logo || c.logo.trim() === '');
+    
+    if (missingItems.length === 0) {
+        return showToast("Parabéns! Todos os animes e filmes já possuem Logo (Clearlogo).", false);
+    }
+
+    showConfirm('Atualização em Massa', `Encontramos ${missingItems.length} obras sem logo. Deseja buscar e sincronizar automaticamente no TMDB? O processo pode demorar um pouco.`, async () => {
+        showButtonSpinner(btn);
+        resultsDiv.innerHTML = '';
+        progressText.classList.remove('hidden');
+        let successCount = 0;
+
+        progressText.textContent = `Processando 0 de ${missingItems.length} animes...`;
+
+        for (let i = 0; i < missingItems.length; i++) {
+            const item = missingItems[i];
+            progressText.textContent = `Buscando logo: ${i + 1}/${missingItems.length} (${item.title})...`;
+
+            try {
+                // Fetch focado em pegar imagens em pt-BR e inglês
+                const imgData = await fetchTMDB(`${item.type}/${item.tmdb_id}/images`, 'include_image_language=pt-BR,pt,en,null');
+                
+                if (imgData && imgData.logos && imgData.logos.length > 0) {
+                    const logoUrl = `https://image.tmdb.org/t/p/original${imgData.logos[0].file_path}`;
+                    
+                    // Atualiza no Firebase
+                    await updateDoc(doc(db, 'content', item.id), { logo: logoUrl });
+                    successCount++;
+
+                    // Renderiza o visual do sucesso (Glassmorphism + Cores Pink)
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center gap-3 p-3 bg-black/50 rounded-xl border border-pink-500/30';
+                    div.innerHTML = `
+                        <div class="w-16 h-12 flex items-center justify-center bg-slate-800 rounded p-1">
+                            <img src="${logoUrl}" class="max-w-full max-h-full object-contain">
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="font-bold text-white text-sm truncate">${escapeHTML(item.title)}</h4>
+                            <p class="text-xs text-slate-400">Logo: <span class="text-pink-400 font-bold">Adicionado</span></p>
+                        </div>
+                        <div class="bg-pink-500/20 p-2 rounded-full"><svg class="w-4 h-4 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>
+                    `;
+                    resultsDiv.prepend(div); 
+                }
+            } catch (e) {
+                console.error("Erro ao atualizar o logo do item", item.title, e);
+            }
+        }
+
+        progressText.textContent = `Varredura concluída! ${successCount} logos atualizados com sucesso.`;
+        hideButtonSpinner(btn, '✨ Buscar Logos Novamente');
+        window.initializeGlassEffects();
+        showToast(`Processo finalizado! ${successCount} novos logos sincronizados.`);
     });
 };
 
