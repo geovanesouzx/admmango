@@ -98,7 +98,7 @@
                     </a>
                     <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="bulkUpdatePage">
                         <svg class="nav-icon h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                        <span class="font-medium">Att. Classificações</span>
+                        <span class="font-medium">Att. em Massa</span>
                     </a>
                     <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="achievementsPage">
                         <svg class="nav-icon h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
@@ -278,7 +278,7 @@
                                         </div>
                                     </div>
                                     
-                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-black/30 p-5 rounded-xl border border-slate-700">
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-black/30 p-5 rounded-xl border border-slate-700 mt-6">
                                         <div>
                                             <label class="block text-sm font-bold text-amber-500 mb-2">Capa Principal (Poster)</label>
                                             <div class="flex gap-2">
@@ -292,6 +292,15 @@
                                             <label class="block text-sm font-bold text-amber-500 mb-2">Imagem de Fundo (Backdrop)</label>
                                             <div class="flex gap-2">
                                                 <input type="url" id="custom-backdrop" class="flex-1 p-3 glass-input rounded-lg text-sm" placeholder="URL do Fundo...">
+                                                <button type="button" onclick="openTmdbImages('add')" class="glass-button rounded-lg px-4" style="--bg-color: rgba(59, 130, 246, 0.6);">
+                                                    <div class="glass-content text-white text-sm">Ver TMDB</div>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-bold text-amber-500 mb-2">Logo Transparente (PNG)</label>
+                                            <div class="flex gap-2">
+                                                <input type="url" id="custom-logo" class="flex-1 p-3 glass-input rounded-lg text-sm" placeholder="URL do Logo...">
                                                 <button type="button" onclick="openTmdbImages('add')" class="glass-button rounded-lg px-4" style="--bg-color: rgba(59, 130, 246, 0.6);">
                                                     <div class="glass-content text-white text-sm">Ver TMDB</div>
                                                 </button>
@@ -356,8 +365,7 @@
                     </div>
                 </div>
 
-                <!-- O restante do arquivo continua com as demais abas (badgeManagerPage, requestsPage, etc.) conforme seu código original -->
-                <!-- (Por brevidade, as abas seguintes foram mantidas iguais ao original para manter a integridade do seu projeto) -->
+                <!-- 2.3 TELA: GERENCIADOR DE SELOS -->
                 <div id="badgeManagerPage" class="content-page space-y-6">
                     <div class="flex items-center gap-3 px-2 mb-6">
                         <div class="p-2 bg-amber-500/20 rounded-lg text-amber-500">
@@ -595,7 +603,7 @@
                                     </div>
                                 </div>
                                 
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-black/30 p-5 rounded-xl border border-slate-700">
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-black/30 p-5 rounded-xl border border-slate-700 mt-6">
                                     <div>
                                         <label class="block text-sm font-bold text-purple-400 mb-2">Capa Principal (Poster)</label>
                                         <div class="flex gap-2">
@@ -609,6 +617,15 @@
                                         <label class="block text-sm font-bold text-purple-400 mb-2">Imagem de Fundo (Backdrop)</label>
                                         <div class="flex gap-2">
                                             <input type="url" id="edit-custom-backdrop" class="flex-1 p-3 glass-input rounded-lg text-sm" placeholder="URL do Fundo...">
+                                            <button type="button" onclick="openTmdbImages('edit')" class="glass-button rounded-lg px-4" style="--bg-color: rgba(59, 130, 246, 0.6);">
+                                                <div class="glass-content text-white text-sm">Ver TMDB</div>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-bold text-purple-400 mb-2">Logo Transparente (PNG)</label>
+                                        <div class="flex gap-2">
+                                            <input type="url" id="edit-custom-logo" class="flex-1 p-3 glass-input rounded-lg text-sm" placeholder="URL do Logo...">
                                             <button type="button" onclick="openTmdbImages('edit')" class="glass-button rounded-lg px-4" style="--bg-color: rgba(59, 130, 246, 0.6);">
                                                 <div class="glass-content text-white text-sm">Ver TMDB</div>
                                             </button>
@@ -1094,37 +1111,63 @@
                     </div>
                 </div>
 
-                <!-- 9. NOVA TELA: ATUALIZAÇÃO EM MASSA (CLASSIFICAÇÕES) -->
+                <!-- 9. NOVA TELA: ATUALIZAÇÃO EM MASSA (CLASSIFICAÇÕES E LOGOS) -->
                 <div id="bulkUpdatePage" class="content-page space-y-6">
                     <div class="flex items-center gap-3 px-2 mb-6">
                         <div class="p-2 bg-yellow-500/20 rounded-lg text-yellow-500"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div>
                         <h1 class="text-3xl font-bold text-white">Atualização em Massa</h1>
                     </div>
 
-                    <div class="glass-container rounded-2xl border border-yellow-500/20" style="--bg-color: rgba(15, 23, 42, 0.6);">
-                        <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
-                        <div class="glass-content p-6 md:p-8">
-                            <div class="flex flex-col md:flex-row items-center justify-between gap-6 mb-6">
-                                <div>
-                                    <h3 class="text-xl font-bold text-white mb-2">Sincronizar Classificações Indicativas</h3>
-                                    <p class="text-sm text-slate-400 max-w-2xl">Esta ferramenta vai varrer todo o seu catálogo e buscar automaticamente a idade indicativa (Livre, 10, 12, 14, 16, 18) lá no TMDB para os filmes e séries que ainda estão com este campo vazio.</p>
-                                    <p id="bulk-progress-text" class="text-yellow-400 font-bold mt-4 text-sm hidden"></p>
-                                </div>
-                                <button id="start-bulk-btn" onclick="startBulkAgeRatingUpdate()" class="glass-button flex-shrink-0 rounded-xl py-3 px-6" style="--bg-color: rgba(234, 179, 8, 0.8);">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        
+                        <!-- Coluna 1: Classificação Indicativa -->
+                        <div class="glass-container rounded-2xl border border-yellow-500/20" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content p-6 flex flex-col h-full">
+                                <h3 class="text-xl font-bold text-white mb-2">Sincronizar Idade Indicativa</h3>
+                                <p class="text-sm text-slate-400 mb-4">Busca a idade (Livre, 10, 12, 14, 16, 18) no TMDB para os animes com este campo vazio.</p>
+                                
+                                <button id="start-bulk-btn" onclick="startBulkAgeRatingUpdate()" class="glass-button w-full rounded-xl py-3 mb-4" style="--bg-color: rgba(234, 179, 8, 0.8);">
                                     <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
-                                    <div class="glass-content text-slate-900 font-bold"><span class="button-text">⚡ Iniciar Varredura</span><div class="button-spinner"><div class="spinner border-slate-900 border-b-white"></div></div></div>
+                                    <div class="glass-content text-slate-900 font-bold"><span class="button-text">⚡ Buscar Idades</span><div class="button-spinner"><div class="spinner border-slate-900 border-b-white"></div></div></div>
                                 </button>
-                            </div>
+                                <p id="bulk-progress-text" class="text-yellow-400 font-bold text-sm hidden mb-4"></p>
 
-                            <div class="bg-black/30 rounded-xl p-4 min-h-[250px] border border-slate-700/50">
-                                <div id="bulk-results-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[50vh] overflow-y-auto pr-2">
-                                    <div class="col-span-full flex flex-col items-center justify-center h-40 text-slate-500">
-                                        <svg class="w-12 h-12 mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                        <p>Clique em "Iniciar Varredura" para procurar animes sem classificação.</p>
+                                <div class="bg-black/30 rounded-xl p-4 flex-1 border border-slate-700/50">
+                                    <div id="bulk-results-list" class="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
+                                        <div class="flex flex-col items-center justify-center h-40 text-slate-500">
+                                            <svg class="w-12 h-12 mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                            <p class="text-center text-sm">Clique no botão acima para iniciar.</p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Coluna 2: Logos (Clearlogos) -->
+                        <div class="glass-container rounded-2xl border border-pink-500/20" style="--bg-color: rgba(15, 23, 42, 0.6);">
+                            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                            <div class="glass-content p-6 flex flex-col h-full">
+                                <h3 class="text-xl font-bold text-white mb-2">Sincronizar Logos (Clearlogos)</h3>
+                                <p class="text-sm text-slate-400 mb-4">Busca imagens transparentes do título no TMDB para todos os animes que ainda não possuem um logo.</p>
+                                
+                                <button id="start-bulk-logos-btn" onclick="startBulkLogoUpdate()" class="glass-button w-full rounded-xl py-3 mb-4" style="--bg-color: rgba(236, 72, 153, 0.8);">
+                                    <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+                                    <div class="glass-content text-white font-bold"><span class="button-text">✨ Buscar Logos</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                </button>
+                                <p id="bulk-logos-progress-text" class="text-pink-400 font-bold text-sm hidden mb-4"></p>
+
+                                <div class="bg-black/30 rounded-xl p-4 flex-1 border border-slate-700/50">
+                                    <div id="bulk-logos-results-list" class="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
+                                        <div class="flex flex-col items-center justify-center h-40 text-slate-500">
+                                            <svg class="w-12 h-12 mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                            <p class="text-center text-sm">Deixe seus animes com a cara da Netflix.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
 
@@ -1233,7 +1276,7 @@
 
     <!-- Modals Globais -->
     <div id="tmdb-images-modal" class="hidden fixed inset-0 bg-black/90 z-[400] flex items-center justify-center p-4">
-        <div class="glass-container w-full max-w-5xl h-[80vh] flex flex-col rounded-2xl" style="--bg-color: rgba(30, 41, 59, 0.95);">
+        <div class="glass-container w-full max-w-6xl h-[85vh] flex flex-col rounded-2xl" style="--bg-color: rgba(30, 41, 59, 0.95);">
             <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
             <div class="glass-content flex flex-col h-full">
                 <div class="flex items-center justify-between p-6 border-b border-slate-700">
@@ -1244,11 +1287,15 @@
                     <div id="images-loading" class="hidden text-center py-10"><div class="spinner-lg mx-auto"></div></div>
                     <div>
                         <h3 class="text-lg font-bold text-amber-500 mb-4 border-b border-amber-500/30 pb-2">Capas Principais (Posters)</h3>
-                        <div id="tmdb-posters-grid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4"></div>
+                        <div id="tmdb-posters-grid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4"></div>
                     </div>
                     <div>
                         <h3 class="text-lg font-bold text-blue-400 mb-4 border-b border-blue-400/30 pb-2">Imagens de Fundo (Backdrops)</h3>
-                        <div id="tmdb-backdrops-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4"></div>
+                        <div id="tmdb-backdrops-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"></div>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-pink-400 mb-4 border-b border-pink-400/30 pb-2">Logos Transparentes (Clearlogos)</h3>
+                        <div id="tmdb-logos-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 items-center"></div>
                     </div>
                 </div>
             </div>
