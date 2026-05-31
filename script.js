@@ -1096,8 +1096,16 @@ function renderCatalog() {
 window.toggleFeaturedItem = async function(docId) {
     const isFeatured = featuredItemIds.includes(docId);
     try {
-        if (isFeatured) { await setDoc(doc(db, 'config', 'featured'), { items: [] }, { merge: true }); showToast('Removido do destaque.'); } 
-        else { await setDoc(doc(db, 'config', 'featured'), { items: [docId] }, { merge: true }); showToast('Definido como Destaque principal!'); }
+        let newItems = [...featuredItemIds];
+        if (isFeatured) { 
+            newItems = newItems.filter(id => id !== docId);
+            await setDoc(doc(db, 'config', 'featured'), { items: newItems }, { merge: true }); 
+            showToast('Removido dos destaques.'); 
+        } else { 
+            newItems.push(docId);
+            await setDoc(doc(db, 'config', 'featured'), { items: newItems }, { merge: true }); 
+            showToast('Adicionado aos destaques!'); 
+        }
     } catch (err) { showToast('Erro ao atualizar.', true); }
 }
 
