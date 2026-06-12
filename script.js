@@ -1,8 +1,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, doc, setDoc, getDocs, getDoc, query, where, serverTimestamp, onSnapshot, deleteDoc, updateDoc, addDoc, writeBatch, collectionGroup } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, doc, setDoc, getDocs, getDoc, query, where, serverTimestamp, onSnapshot, deleteDoc, updateDoc, addDoc, writeBatch, collectionGroup, limit, startAfter, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-const firebaseConfig = {
+// ==========================================
+// CONFIGURAÇÕES FIREBASE MULTI-APP
+// ==========================================
+const mangoConfig = {
     apiKey: "AIzaSyDLGgSoNwLy_f6FRG3jHmlNJ5AIb9MC7fs",
     authDomain: "mango-anime.firebaseapp.com",
     projectId: "mango-anime",
@@ -11,17 +14,47 @@ const firebaseConfig = {
     appId: "1:269303739791:web:bee162ff744b83e41187fa"
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+const starlightConfig = {
+    apiKey: "AIzaSyA791i8R8Bmrn3toFxFltZ40TU7PUavev8",
+    authDomain: "starlight-max.firebaseapp.com",
+    projectId: "starlight-max",
+    storageBucket: "starlight-max.appspot.com",
+    messagingSenderId: "120477177511",
+    appId: "1:120477177511:web:5a75a2dd6d8089c829ed82"
+};
 
+// Inicializa Apps
+const appMango = initializeApp(mangoConfig, "mango");
+const appStarlight = initializeApp(starlightConfig, "starlight");
+
+// O Auth principal será o do Mango (para você entrar no painel)
+const auth = getAuth(appMango);
+
+// Instâncias de Bancos de Dados
+const dbMango = getFirestore(appMango);
+const dbStarlight = getFirestore(appStarlight);
+
+// Estado de Gerenciamento Atual (Alterne isso no HTML)
+window.currentManageSite = 'mango'; // 'mango' ou 'starlight'
+
+// Função auxiliar para retornar o banco de dados focado no momento
+window.getDb = () => window.currentManageSite === 'starlight' ? dbStarlight : dbMango;
+
+// ==========================================
+// VARIÁVEIS GLOBAIS
+// ==========================================
 const TMDB_API_KEY = '5954890d9e9b723ff3032f2ec429fec3';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_IMG_URL = 'https://image.tmdb.org/t/p/w500';
 const TMDB_STILL_URL = 'https://image.tmdb.org/t/p/w300';
 
 let tmdbData = null;
+
+// Paginação do Catálogo
 let catalogData = []; 
+let lastVisibleCatalogDoc = null;
+const CATALOG_LIMIT = 24;
+
 let featuredItemIds = []; 
 let carouselsData = [];
 let avatarGroupsData = [];
@@ -30,8 +63,10 @@ let verticalGroupsData = [];
 let requestsData = []; 
 let achievementsData = []; 
 
-// NOVA VARIÁVEL GLOBAL PARA O TELEGRAM
 let telegramConfig = { botToken: '', channels: '', appLink: '', active: false };
+
+// Desinscritores de Listeners (Para evitar vazamento de memória ao trocar de DB)
+let unsubFeatured, unsubCarousels, unsubAvatars, unsubBgs, unsubVerticalBgs, unsubRequests, unsubAchievements, unsubUpdates;
 
 function escapeHTML(str) { return str == null ? '' : String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 
@@ -57,6 +92,7 @@ let toastTimeout;
 window.showToast = function(message, isError = false) {
     clearTimeout(toastTimeout);
     const toast = document.getElementById('toast-notification');
+    if(!toast) return;
     document.getElementById('toast-message').textContent = message;
     toast.querySelector('.glass-overlay').style.setProperty('--bg-color', isError ? 'rgba(220, 38, 38, 0.9)' : 'rgba(245, 158, 11, 0.9)');
     toast.classList.remove('translate-x-[120%]');
@@ -65,6 +101,7 @@ window.showToast = function(message, isError = false) {
 
 window.showConfirm = function(title, message, onConfirm) {
     const modal = document.getElementById('confirm-modal');
+    if(!modal) return;
     document.getElementById('confirm-title').textContent = title;
     document.getElementById('confirm-message').textContent = message;
     modal.classList.remove('hidden');
@@ -140,9 +177,46 @@ async function fetchTmdbAgeRating(id, type) {
 }
 
 // ==========================================
+// SISTEMA DE TROCA DE SITE (MANGO / STARLIGHT)
+// ==========================================
+window.switchManageSite = function(siteId) {
+    window.currentManageSite = siteId;
+    
+    // Atualiza botões no HTML
+    document.querySelectorAll('.site-selector-btn').forEach(btn => {
+        if(btn.dataset.site === siteId) btn.classList.add('ring-2', 'ring-amber-500');
+        else btn.classList.remove('ring-2', 'ring-amber-500');
+    });
+
+    showToast(`Painel alterado para o banco de dados: ${siteId.toUpperCase()}`);
+    
+    // Desinscreve ouvintes antigos
+    if(unsubFeatured) unsubFeatured();
+    if(unsubCarousels) unsubCarousels();
+    if(unsubAvatars) unsubAvatars();
+    if(unsubBgs) unsubBgs();
+    if(unsubVerticalBgs) unsubVerticalBgs();
+    if(unsubRequests) unsubRequests();
+    if(unsubAchievements) unsubAchievements();
+    if(unsubUpdates) unsubUpdates();
+
+    // Recarrega todos os ouvintes no novo BD
+    listenForFeaturedItems();
+    initCarouselLogic(); 
+    initAvatarLogic();
+    initBackgroundLogic();
+    initVerticalBgLogic();
+    initRequestsLogic(); 
+    initAchievementsLogic();
+    initUpdateLogic();
+    
+    // Recarrega Catálogo
+    window.loadCatalog(false);
+};
+
+// ==========================================
 // SISTEMA DE NOTIFICAÇÕES (IN-APP, PUSH E TELEGRAM)
 // ==========================================
-
 window.sendToTelegram = async function(title, synopsis, imageUrl, isUpdate = false) {
     if (!telegramConfig.active || !telegramConfig.botToken || !telegramConfig.channels) return;
 
@@ -180,7 +254,7 @@ window.sendToTelegram = async function(title, synopsis, imageUrl, isUpdate = fal
 window.sendPushNotification = async function(topic, title, body) {
     let webhookUrl = '';
     try {
-        const conf = await getDoc(doc(db, 'config', 'fcm'));
+        const conf = await getDoc(doc(window.getDb(), 'config', 'fcm'));
         if (conf.exists()) webhookUrl = conf.data().webhookUrl;
     } catch(e){}
 
@@ -201,15 +275,15 @@ window.sendPushNotification = async function(topic, title, body) {
 
 window.sendInAppNotification = async function(uidList, title, message) {
     try {
-        const batch = writeBatch(db);
+        const batch = writeBatch(window.getDb());
         let count = 0;
         
         const limitedUids = uidList.slice(0, 150); 
         
         for (const uid of limitedUids) {
-            const profilesSnap = await getDocs(collection(db, 'users', uid, 'profiles'));
+            const profilesSnap = await getDocs(collection(window.getDb(), 'users', uid, 'profiles'));
             profilesSnap.forEach(pDoc => {
-                const notifRef = doc(collection(db, 'users', uid, 'profiles', pDoc.id, 'notifications'));
+                const notifRef = doc(collection(window.getDb(), 'users', uid, 'profiles', pDoc.id, 'notifications'));
                 batch.set(notifRef, {
                     title: title,
                     message: message,
@@ -228,13 +302,13 @@ window.sendInAppNotification = async function(uidList, title, message) {
 };
 
 function initNotificationsLogic() {
-    getDoc(doc(db, 'config', 'fcm')).then(docSnap => {
+    getDoc(doc(window.getDb(), 'config', 'fcm')).then(docSnap => {
         if (docSnap.exists() && docSnap.data().webhookUrl) {
-            document.getElementById('notif-webhook-url').value = docSnap.data().webhookUrl;
+            if(document.getElementById('notif-webhook-url')) document.getElementById('notif-webhook-url').value = docSnap.data().webhookUrl;
         }
     });
 
-    getDoc(doc(db, 'config', 'telegram')).then(docSnap => {
+    getDoc(doc(window.getDb(), 'config', 'telegram')).then(docSnap => {
         if (docSnap.exists()) {
             telegramConfig = docSnap.data();
             if(document.getElementById('tg-bot-token')) document.getElementById('tg-bot-token').value = telegramConfig.botToken || '';
@@ -244,18 +318,21 @@ function initNotificationsLogic() {
         }
     });
 
-    document.getElementById('webhook-form').onsubmit = async (e) => {
-        e.preventDefault();
-        const btn = document.getElementById('save-webhook-btn');
-        showButtonSpinner(btn);
-        try {
-            await setDoc(doc(db, 'config', 'fcm'), { webhookUrl: document.getElementById('notif-webhook-url').value }, { merge: true });
-            showToast("URL do Webhook atualizado com sucesso!");
-        } catch(err) {
-            showToast("Erro ao salvar Webhook.", true);
-        }
-        hideButtonSpinner(btn, 'Salvar Webhook');
-    };
+    const webHookForm = document.getElementById('webhook-form');
+    if(webHookForm) {
+        webHookForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('save-webhook-btn');
+            showButtonSpinner(btn);
+            try {
+                await setDoc(doc(window.getDb(), 'config', 'fcm'), { webhookUrl: document.getElementById('notif-webhook-url').value }, { merge: true });
+                showToast("URL do Webhook atualizado com sucesso!");
+            } catch(err) {
+                showToast("Erro ao salvar Webhook.", true);
+            }
+            hideButtonSpinner(btn, 'Salvar Webhook');
+        };
+    }
 
     const tgForm = document.getElementById('telegram-form');
     if(tgForm) {
@@ -270,7 +347,7 @@ function initNotificationsLogic() {
                     appLink: document.getElementById('tg-app-link').value.trim(),
                     active: document.getElementById('tg-active').checked
                 };
-                await setDoc(doc(db, 'config', 'telegram'), telegramConfig, { merge: true });
+                await setDoc(doc(window.getDb(), 'config', 'telegram'), telegramConfig, { merge: true });
                 showToast("Configurações do Telegram salvas!");
             } catch(err) {
                 showToast("Erro ao salvar Telegram.", true);
@@ -279,20 +356,23 @@ function initNotificationsLogic() {
         };
     }
 
-    document.getElementById('global-notif-form').onsubmit = async (e) => {
-        e.preventDefault();
-        const btn = document.getElementById('send-global-notif-btn');
-        const title = document.getElementById('notif-title').value.trim();
-        const body = document.getElementById('notif-body').value.trim();
-        
-        showConfirm('Aviso Global', `Deseja enviar a notificação "${title}" para todos os aparelhos?`, async () => {
-            showButtonSpinner(btn);
-            await window.sendPushNotification("all", title, body);
-            showToast("Notificação Global Disparada!");
-            document.getElementById('global-notif-form').reset();
-            hideButtonSpinner(btn, 'Disparar Notificação');
-        });
-    };
+    const globalNotifForm = document.getElementById('global-notif-form');
+    if (globalNotifForm) {
+        globalNotifForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('send-global-notif-btn');
+            const title = document.getElementById('notif-title').value.trim();
+            const body = document.getElementById('notif-body').value.trim();
+            
+            showConfirm('Aviso Global', `Deseja enviar a notificação "${title}" para todos os aparelhos?`, async () => {
+                showButtonSpinner(btn);
+                await window.sendPushNotification("all", title, body);
+                showToast("Notificação Global Disparada!");
+                document.getElementById('global-notif-form').reset();
+                hideButtonSpinner(btn, 'Disparar Notificação');
+            });
+        };
+    }
 }
 
 // ==========================================
@@ -309,14 +389,14 @@ function initVerifyLogic() {
         resDiv.innerHTML = '<div class="spinner mx-auto block mt-4"></div>';
 
         try {
-            const usernameDoc = await getDoc(doc(db, 'usernames', input));
+            const usernameDoc = await getDoc(doc(window.getDb(), 'usernames', input));
             if(!usernameDoc.exists()) {
                 resDiv.innerHTML = '<p class="text-red-400 text-center py-4">Usuário não encontrado. O username está correto?</p>';
                 return;
             }
 
             const { uid, profileId } = usernameDoc.data();
-            const profileDoc = await getDoc(doc(db, 'users', uid, 'profiles', profileId));
+            const profileDoc = await getDoc(doc(window.getDb(), 'users', uid, 'profiles', profileId));
             
             if(!profileDoc.exists()) {
                 resDiv.innerHTML = '<p class="text-red-400 text-center py-4">Perfil não encontrado no banco de dados.</p>';
@@ -357,15 +437,15 @@ function initVerifyLogic() {
             newState ? 'Deseja conceder o selo azul para este usuário? Isto vai atualizar todos os comentários dele.' : 'Deseja remover o selo azul deste usuário?', 
             async () => {
                 try {
-                    await updateDoc(doc(db, 'users', uid, 'profiles', profileId), {
+                    await updateDoc(doc(window.getDb(), 'users', uid, 'profiles', profileId), {
                         isVerified: newState
                     });
 
-                    const commentsQuery = query(collection(db, 'comments'), where('profileId', '==', profileId));
+                    const commentsQuery = query(collection(window.getDb(), 'comments'), where('profileId', '==', profileId));
                     const commentsSnap = await getDocs(commentsQuery);
                     
                     if (!commentsSnap.empty) {
-                        const batch = writeBatch(db);
+                        const batch = writeBatch(window.getDb());
                         commentsSnap.forEach(cDoc => {
                             batch.update(cDoc.ref, { isAuthorVerified: newState });
                         });
@@ -385,10 +465,11 @@ function initVerifyLogic() {
 
     window.loadVerifiedUsers = async function() {
         const listDiv = document.getElementById('verified-users-list');
+        if(!listDiv) return;
         listDiv.innerHTML = '<div class="spinner mx-auto block mt-4"></div>';
         
         try {
-            const q = query(collectionGroup(db, 'profiles'), where('isVerified', '==', true));
+            const q = query(collectionGroup(window.getDb(), 'profiles'), where('isVerified', '==', true));
             const snap = await getDocs(q);
             
             listDiv.innerHTML = '';
@@ -424,13 +505,7 @@ function initVerifyLogic() {
             });
         } catch(e) {
             console.error(e);
-            if (e.message.includes('index')) {
-                const linkMatch = e.message.match(/https:\/\/[^\s]+/);
-                const linkHtml = linkMatch ? `<a href="${linkMatch[0]}" target="_blank" class="text-blue-400 underline">AQUI</a>` : 'no console do Firebase';
-                listDiv.innerHTML = `<p class="text-amber-400 text-sm py-2">Falta criar um Índice no Firestore para exibir esta lista! Clique ${linkHtml} para criar (Demora cerca de 1 min).</p>`;
-            } else {
-                listDiv.innerHTML = '<p class="text-red-400 text-sm py-2">Erro ao carregar lista. Verifique a consola.</p>';
-            }
+            listDiv.innerHTML = '<p class="text-red-400 text-sm py-2">Erro ao carregar lista. Verifique os índices.</p>';
         }
     };
 }
@@ -439,24 +514,27 @@ function initVerifyLogic() {
 // SISTEMA DE PEDIDOS
 // ==========================================
 function initRequestsLogic() {
-    onSnapshot(collection(db, 'requests'), (snapshot) => {
+    unsubRequests = onSnapshot(collection(window.getDb(), 'requests'), (snapshot) => {
         requestsData = [];
         snapshot.forEach(doc => requestsData.push({ id: doc.id, ...doc.data() }));
         renderRequests();
         
         const pendingCount = requestsData.filter(r => r.status === 'PENDING').length;
         const badge = document.getElementById('pending-requests-badge');
-        if (pendingCount > 0) {
-            badge.textContent = pendingCount;
-            badge.classList.remove('hidden');
-        } else {
-            badge.classList.add('hidden');
+        if(badge) {
+            if (pendingCount > 0) {
+                badge.textContent = pendingCount;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
         }
     });
 }
 
 function renderRequests() {
     const list = document.getElementById('requests-list');
+    if(!list) return;
     list.innerHTML = '';
     if (requestsData.length === 0) {
         list.innerHTML = '<p class="text-slate-400 text-center py-8">Nenhum pedido encontrado.</p>';
@@ -507,7 +585,7 @@ function renderRequests() {
 
 window.updateRequestStatus = async function(id, status) {
     try {
-        await updateDoc(doc(db, 'requests', id), { status: status });
+        await updateDoc(doc(window.getDb(), 'requests', id), { status: status });
         showToast("Status do pedido atualizado!");
 
         if (status === 'ADDED') {
@@ -533,7 +611,7 @@ window.updateRequestStatus = async function(id, status) {
 window.deleteRequest = function(id) {
     showConfirm('Excluir Pedido', 'Tem certeza que deseja apagar este pedido permanentemente?', async () => {
         try {
-            await deleteDoc(doc(db, 'requests', id));
+            await deleteDoc(doc(window.getDb(), 'requests', id));
             showToast('Pedido excluído com sucesso!');
         } catch (e) {
             showToast('Erro ao excluir pedido.', true);
@@ -661,10 +739,7 @@ function createEpisodeRow(episodeNumber, episodeName = '', episodeOverview = '',
     const stillInp = row.querySelector('.episode-still-path');
     const imgEl = row.querySelector('img');
 
-    // Ao digitar uma URL de capa, atualiza a imagem em tempo real
-    stillInp.oninput = () => {
-        imgEl.src = stillInp.value || 'https://placehold.co/120x67/1c1917/999999?text=EP';
-    };
+    stillInp.oninput = () => { imgEl.src = stillInp.value || 'https://placehold.co/120x67/1c1917/999999?text=EP'; };
 
     const upd = () => { 
         if(!!urlInp.value.trim() || !!altUrlInp.value.trim() || chk.checked) { 
@@ -742,7 +817,7 @@ window.syncTmdbEpisodes = async function(listId, tmdbIdInputId) {
 
                 const airDate = tmdbEp.air_date ? new Date(tmdbEp.air_date) : null;
                 const hasAired = airDate && airDate <= today;
-                const isGenericName = tmdbEp.name && (tmdbEp.name.toLowerCase().startsWith('episode') || tmdbEp.name.toLowerCase().startsWith('episódio') || tmdbEp.name.toLowerCase().startsWith('ep '));
+                const isGenericName = tmdbEp.name && (tmdbEp.name.toLowerCase().startsWith('episode') || ep.name.toLowerCase().startsWith('episódio') || ep.name.toLowerCase().startsWith('ep '));
                 const hasInfo = tmdbEp.still_path || (tmdbEp.overview && tmdbEp.overview.trim() !== '') || !isGenericName;
 
                 if (existingRowsMap.has(uniqueId)) {
@@ -755,7 +830,6 @@ window.syncTmdbEpisodes = async function(listId, tmdbIdInputId) {
                     let updated = false;
 
                     if (tmdbEp.name && !isGenericName) {
-                        // Sempre atualiza o nome se o TMDB tiver um nome válido e não genérico
                         if (titleInput.value !== tmdbEp.name) {
                             titleInput.value = tmdbEp.name;
                             updated = true;
@@ -769,7 +843,6 @@ window.syncTmdbEpisodes = async function(listId, tmdbIdInputId) {
 
                     if (tmdbEp.still_path) {
                         const url = `https://image.tmdb.org/t/p/w300${tmdbEp.still_path}`;
-                        // Atualiza a imagem se estiver vazia, for placeholder ou for link antigo do tmdb
                         if (!stillInput.value || stillInput.value.includes('placehold') || stillInput.value.includes('tmdb.org')) {
                             if (stillInput.value !== url) {
                                 stillInput.value = url;
@@ -806,7 +879,7 @@ window.syncTmdbEpisodes = async function(listId, tmdbIdInputId) {
 
         window.initializeGlassEffects();
         if (addedCount > 0 || addedSeasonsCount > 0 || updatedCount > 0) {
-            showToast(`Varredura TMDB: ${addedSeasonsCount} abas criadas, ${addedCount} episódios adicionados, ${updatedCount} atualizados/preenchidos!`);
+            showToast(`Varredura TMDB: ${addedSeasonsCount} abas criadas, ${addedCount} episódios adicionados, ${updatedCount} atualizados!`);
         } else {
             showToast("Tudo certo! O catálogo local já está igualzinho ao TMDB.");
         }
@@ -901,7 +974,7 @@ function createSeasonGroupElement(seasonNumber, seasonName, targetListId, tmdbId
             }
         } catch(err) {
             console.error(err);
-            showToast("Falha na IA. Verifique sua API Key ou se o limite foi atingido.", true);
+            showToast("Falha na IA. Verifique sua API Key.", true);
         } finally {
             if(document.body.contains(btn)) {
                 btn.innerHTML = originalText;
@@ -1036,40 +1109,94 @@ window.handleAddSeasonClick = async function(seasonNum, btnElement, isEdit, tmdb
 }
 
 // ==========================================
-// CATÁLOGO
+// CATÁLOGO COM PAGINAÇÃO (CARREGAR MAIS)
 // ==========================================
 function listenForFeaturedItems() {
-    onSnapshot(doc(db, 'config', 'featured'), (docSnap) => {
+    unsubFeatured = onSnapshot(doc(window.getDb(), 'config', 'featured'), (docSnap) => {
         featuredItemIds = docSnap.exists() ? (docSnap.data()?.items || []) : [];
-        renderCatalog();
+        if(catalogData.length > 0) renderCatalogItems(catalogData, true); // re-render para mostrar destaques
     });
 }
 
-function listenForCatalog() {
-    onSnapshot(collection(db, 'content'), (snapshot) => {
-        catalogData = [];
-        snapshot.forEach(doc => catalogData.push({ id: doc.id, ...doc.data() }));
-        renderCatalog();
-        if (window.renderBmList) window.renderBmList();
-    });
-    document.getElementById('catalog-search').addEventListener('input', renderCatalog);
-}
-
-function renderCatalog() {
+// Essa função agora é ativada pelo HTML quando clicamos "Carregar Mais" ou buscamos
+window.loadCatalog = async function(isLoadMore = false) {
     const list = document.getElementById('catalog-list');
-    const term = document.getElementById('catalog-search').value.toLowerCase();
-    const filtered = catalogData.filter(i => i.title && i.title.toLowerCase().includes(term));
-    
-    if(!filtered.length) { 
-        list.className = "flex justify-center w-full mt-10";
-        list.innerHTML = '<p class="text-slate-400 text-center py-8 col-span-full font-semibold">Nenhum anime encontrado.</p>'; 
-        return; 
+    const loadMoreBtn = document.getElementById('load-more-catalog-btn');
+    const searchTerm = document.getElementById('catalog-search').value.trim().toLowerCase();
+
+    if (!list) return;
+
+    if (!isLoadMore) {
+        list.innerHTML = '<div class="spinner-lg mx-auto my-8 col-span-full"></div>';
+        lastVisibleCatalogDoc = null;
+        catalogData = [];
     }
 
-    list.className = "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[65vh] overflow-y-auto pr-2 pb-4";
-    list.innerHTML = '';
-    
-    filtered.sort((a,b)=>a.title.localeCompare(b.title)).forEach(item => {
+    try {
+        let q;
+        // Paginação Padrão vs Busca
+        // Em Firestore, a busca local requer puxar muitos dados. Como é um painel admin, vamos puxar mais se estiver buscando
+        if (searchTerm) {
+            // Busca (Limite maior temporário)
+            q = query(collection(window.getDb(), 'content'), orderBy('updatedAt', 'desc'), limit(150));
+        } else {
+            // Paginação Normal
+            if (lastVisibleCatalogDoc && isLoadMore) {
+                q = query(collection(window.getDb(), 'content'), orderBy('updatedAt', 'desc'), startAfter(lastVisibleCatalogDoc), limit(CATALOG_LIMIT));
+            } else {
+                q = query(collection(window.getDb(), 'content'), orderBy('updatedAt', 'desc'), limit(CATALOG_LIMIT));
+            }
+        }
+
+        const snap = await getDocs(q);
+
+        if (!isLoadMore) list.innerHTML = '';
+
+        if (snap.empty && !isLoadMore) {
+            list.className = "flex justify-center w-full mt-10";
+            list.innerHTML = '<p class="text-slate-400 text-center py-8 col-span-full font-semibold">Nenhum anime encontrado.</p>';
+            if(loadMoreBtn) loadMoreBtn.classList.add('hidden');
+            return;
+        }
+
+        if (!snap.empty) {
+            list.className = "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[65vh] overflow-y-auto pr-2 pb-4";
+            lastVisibleCatalogDoc = snap.docs[snap.docs.length - 1];
+            
+            let newItems = [];
+            snap.forEach(docSnap => {
+                const item = { id: docSnap.id, ...docSnap.data() };
+                newItems.push(item);
+                if (!catalogData.some(c => c.id === item.id)) {
+                    catalogData.push(item);
+                }
+            });
+
+            if (searchTerm) {
+                newItems = newItems.filter(i => i.title && i.title.toLowerCase().includes(searchTerm));
+            }
+
+            renderCatalogItems(newItems, isLoadMore);
+        }
+
+        if (loadMoreBtn) {
+            if (snap.docs.length < CATALOG_LIMIT || searchTerm) {
+                loadMoreBtn.classList.add('hidden');
+            } else {
+                loadMoreBtn.classList.remove('hidden');
+            }
+        }
+    } catch(e) {
+        console.error("Erro catálogo:", e);
+        if (!isLoadMore) list.innerHTML = '<p class="text-red-400 text-center py-8 col-span-full font-bold">Erro ao carregar o catálogo. Verifique o console.</p>';
+    }
+}
+
+function renderCatalogItems(items, isAppend = false) {
+    const list = document.getElementById('catalog-list');
+    if(!isAppend) list.innerHTML = '';
+
+    items.forEach(item => {
         const isFeatured = featuredItemIds.includes(item.id);
         const featColor = isFeatured ? 'rgba(245,158,11,0.8)' : 'rgba(100,116,139,0.5)';
         const featText = isFeatured ? '⭐ Destaque' : '☆ Destacar';
@@ -1093,25 +1220,35 @@ function renderCatalog() {
     window.initializeGlassEffects();
 }
 
+// Botão de Busca do Catálogo aciona reload
+document.getElementById('catalog-search')?.addEventListener('input', () => {
+    // debounce rápido
+    clearTimeout(window.searchTimeout);
+    window.searchTimeout = setTimeout(() => window.loadCatalog(false), 500);
+});
+
 window.toggleFeaturedItem = async function(docId) {
     const isFeatured = featuredItemIds.includes(docId);
     try {
         let newItems = [...featuredItemIds];
         if (isFeatured) { 
             newItems = newItems.filter(id => id !== docId);
-            await setDoc(doc(db, 'config', 'featured'), { items: newItems }, { merge: true }); 
+            await setDoc(doc(window.getDb(), 'config', 'featured'), { items: newItems }, { merge: true }); 
             showToast('Removido dos destaques.'); 
         } else { 
             newItems.push(docId);
-            await setDoc(doc(db, 'config', 'featured'), { items: newItems }, { merge: true }); 
+            await setDoc(doc(window.getDb(), 'config', 'featured'), { items: newItems }, { merge: true }); 
             showToast('Adicionado aos destaques!'); 
         }
     } catch (err) { showToast('Erro ao atualizar.', true); }
 }
 
 window.deleteContent = function(id, title) {
-    showConfirm('Apagar Anime', `Excluir permanentemente "${title}" do banco de dados?`, async () => {
-        await deleteDoc(doc(db, 'content', id)); showToast('Excluído com sucesso!');
+    showConfirm('Apagar Obra', `Excluir permanentemente "${title}" do banco de dados?`, async () => {
+        await deleteDoc(doc(window.getDb(), 'content', id)); 
+        showToast('Excluído com sucesso!');
+        // Remove da lista
+        window.loadCatalog(false);
     });
 }
 
@@ -1129,7 +1266,7 @@ function initAddContentLogic() {
         res.innerHTML = '<div class="spinner-lg mx-auto"></div>';
 
         const data = await fetchTMDB('search/multi', `query=${encodeURIComponent(q)}`);
-        hideButtonSpinner(document.getElementById('search-tmdb-btn'), 'Buscar Anime');
+        hideButtonSpinner(document.getElementById('search-tmdb-btn'), 'Buscar Obra');
         res.innerHTML = '';
 
         if(data && data.results) {
@@ -1148,16 +1285,17 @@ function initAddContentLogic() {
 
 window.selectItem = async (id, type) => {
     document.getElementById('search-results').innerHTML = '';
+    
+    // Procura no BD ativo se a obra já existe
     try {
-        const q = query(collection(db, 'content'), where('tmdb_id', '==', id));
+        const q = query(collection(window.getDb(), 'content'), where('tmdb_id', '==', id));
         const snap = await getDocs(q);
-        if(!snap.empty) return showConfirm('Já Existe', `Deseja abrir o modo de EDIÇÃO para atualizar este conteúdo?`, () => window.openEditPage(snap.docs[0].id));
+        if(!snap.empty) return showConfirm('Já Existe no Painel Ativo', `Deseja abrir o modo de EDIÇÃO para atualizar este conteúdo?`, () => window.openEditPage(snap.docs[0].id));
     } catch (err) {}
 
     document.getElementById('details-form-container').classList.remove('hidden');
     document.getElementById('tmdb-details').innerHTML = '<div class="spinner-lg mx-auto mt-4"></div>';
     
-    // FETCH ATUALIZADO: Traz as imagens junto com os dados da série/filme
     const [data, ageRating] = await Promise.all([
         fetchTMDB(`${type}/${id}`, 'append_to_response=images&include_image_language=pt-BR,pt,en,null'),
         fetchTmdbAgeRating(id, type)
@@ -1179,12 +1317,10 @@ function renderForm(data, mediaType, ageRating = '14') {
     document.getElementById('custom-poster').value = data.poster_path ? `${TMDB_IMG_URL}${data.poster_path}` : '';
     document.getElementById('custom-backdrop').value = data.backdrop_path ? `https://image.tmdb.org/t/p/original${data.backdrop_path}` : '';
 
-    // NOVO: Capturar Logo
     let logoUrl = '';
     if (data.images && data.images.logos && data.images.logos.length > 0) {
         logoUrl = `https://image.tmdb.org/t/p/original${data.images.logos[0].file_path}`;
     }
-    // Verifica se o input custom-logo existe na tela e preenche
     if(document.getElementById('custom-logo')) {
         document.getElementById('custom-logo').value = logoUrl;
     }
@@ -1235,7 +1371,7 @@ window.openEditPage = async (docId) => {
     if (!item) return;
 
     window.location.hash = 'editContentPage';
-    document.getElementById('edit-title-header').textContent = `Editando...`;
+    document.getElementById('edit-title-header').textContent = `Editando no ${window.currentManageSite.toUpperCase()}`;
     document.getElementById('edit-doc-id').value = item.id;
     document.getElementById('edit-media-type').value = item.type;
     document.getElementById('edit-tmdb-id').value = item.tmdb_id;
@@ -1249,34 +1385,37 @@ window.openEditPage = async (docId) => {
     document.getElementById('edit-age-rating').value = currentRating || '14'; 
 
     const editBadgeSelect = document.getElementById('edit-badge-text');
-    editBadgeSelect.value = item.badgeText || '';
-    
-    if (editBadgeSelect.value === '' && item.badgeText) {
-        const matchOpt = Array.from(editBadgeSelect.options).find(o => o.value.toLowerCase() === item.badgeText.toLowerCase());
-        if (matchOpt) {
-            editBadgeSelect.value = matchOpt.value;
-        } else {
-            const newOpt = document.createElement('option');
-            newOpt.value = item.badgeText;
-            newOpt.text = item.badgeText + ' (Personalizado)';
-            editBadgeSelect.appendChild(newOpt);
-            editBadgeSelect.value = item.badgeText;
+    if(editBadgeSelect) {
+        editBadgeSelect.value = item.badgeText || '';
+        if (editBadgeSelect.value === '' && item.badgeText) {
+            const matchOpt = Array.from(editBadgeSelect.options).find(o => o.value.toLowerCase() === item.badgeText.toLowerCase());
+            if (matchOpt) {
+                editBadgeSelect.value = matchOpt.value;
+            } else {
+                const newOpt = document.createElement('option');
+                newOpt.value = item.badgeText;
+                newOpt.text = item.badgeText + ' (Personalizado)';
+                editBadgeSelect.appendChild(newOpt);
+                editBadgeSelect.value = item.badgeText;
+            }
         }
     }
 
-    if (item.badgeExpiration && item.badgeExpiration > 0) {
-        const d = new Date(item.badgeExpiration);
-        const offset = d.getTimezoneOffset() * 60000;
-        const localDate = new Date(d.getTime() - offset);
-        document.getElementById('edit-badge-expiration').value = localDate.toISOString().split('T')[0];
-    } else {
-        document.getElementById('edit-badge-expiration').value = '';
+    const editBadgeExpInput = document.getElementById('edit-badge-expiration');
+    if(editBadgeExpInput) {
+        if (item.badgeExpiration && item.badgeExpiration > 0) {
+            const d = new Date(item.badgeExpiration);
+            const offset = d.getTimezoneOffset() * 60000;
+            const localDate = new Date(d.getTime() - offset);
+            editBadgeExpInput.value = localDate.toISOString().split('T')[0];
+        } else {
+            editBadgeExpInput.value = '';
+        }
     }
 
     document.getElementById('edit-custom-poster').value = item.poster || '';
     document.getElementById('edit-custom-backdrop').value = item.backdrop || '';
 
-    // NOVO: Carregar Logo salvo
     if(document.getElementById('edit-custom-logo')) {
         document.getElementById('edit-custom-logo').value = item.logo || '';
     }
@@ -1356,7 +1495,7 @@ window.openEditPage = async (docId) => {
     }
 };
 
-// Salvar Adição (Adicionado Gatilho Telegram)
+// Salvar Adição (Multi-DB)
 document.getElementById('content-form').onsubmit = async (e) => {
     e.preventDefault(); const btn = document.getElementById('save-btn'); showButtonSpinner(btn);
     const type = document.getElementById('media-type').value;
@@ -1364,8 +1503,10 @@ document.getElementById('content-form').onsubmit = async (e) => {
     let docId = createSlug(tmdbData.name || tmdbData.title);
     if (!docId || docId.trim() === '') docId = tmdbData.id.toString();
 
-    const badgeExpInput = document.getElementById('add-badge-expiration').value;
-    const badgeExpiration = badgeExpInput ? new Date(badgeExpInput + 'T23:59:59').getTime() : 0;
+    const badgeExpInput = document.getElementById('add-badge-expiration');
+    const badgeExpiration = (badgeExpInput && badgeExpInput.value) ? new Date(badgeExpInput.value + 'T23:59:59').getTime() : 0;
+    
+    const badgeTextEl = document.getElementById('add-badge-text');
 
     let contentData = { 
         title: document.getElementById('add-main-title').value.trim(), 
@@ -1374,15 +1515,16 @@ document.getElementById('content-form').onsubmit = async (e) => {
         tmdb_id: tmdbData.id, 
         poster: document.getElementById('custom-poster').value, 
         backdrop: document.getElementById('custom-backdrop').value, 
-        logo: document.getElementById('custom-logo') ? document.getElementById('custom-logo').value : '', // NOVO
+        logo: document.getElementById('custom-logo') ? document.getElementById('custom-logo').value : '',
         synopsis: tmdbData.overview||'', 
         year: (tmdbData.first_air_date||tmdbData.release_date||'').substring(0,4), 
         genres: (tmdbData.genres||[]).map(g=>g.name), 
-        badgeText: document.getElementById('add-badge-text').value,
+        badgeText: badgeTextEl ? badgeTextEl.value : '',
         badgeExpiration: badgeExpiration,
         addedAt: serverTimestamp(), 
         updatedAt: serverTimestamp() 
     };
+
     try {
         if (type === 'movie') {
             contentData.url = document.getElementById('movie-url').value; 
@@ -1409,32 +1551,43 @@ document.getElementById('content-form').onsubmit = async (e) => {
             });
             contentData.seasons = sMap;
         }
-        await setDoc(doc(db, 'content', docId), contentData);
+
+        // LÓGICA MULTI-SITE
+        const targetSiteSelect = document.getElementById('target-site-add');
+        const siteChoice = targetSiteSelect ? targetSiteSelect.value : 'mango';
+        const dbsToSave = [];
         
-        if (document.getElementById('notify-add').checked) {
+        if(siteChoice === 'mango' || siteChoice === 'both') dbsToSave.push(dbMango);
+        if(siteChoice === 'starlight' || siteChoice === 'both') dbsToSave.push(dbStarlight);
+
+        for (const targetDb of dbsToSave) {
+            await setDoc(doc(targetDb, 'content', docId), contentData);
+        }
+        
+        if (document.getElementById('notify-add') && document.getElementById('notify-add').checked) {
             await window.sendPushNotification('all', 'Novo Lançamento! 🍿', `${contentData.title} acabou de chegar no catálogo. Vá conferir!`);
-            // Disparo Telegram Novo Conteúdo
             await window.sendToTelegram(contentData.title, contentData.synopsis, contentData.poster, false);
         }
 
-        showToast('Salvo com sucesso!'); 
+        showToast(`Salvo com sucesso em: ${siteChoice.toUpperCase()}`); 
         document.getElementById('content-form').reset(); 
         document.getElementById('details-form-container').classList.add('hidden'); 
         document.getElementById('search-query').value = '';
-        document.getElementById('add-badge-text').value = '';
-        document.getElementById('add-badge-expiration').value = '';
-        // NOVO: Limpa o input do logo se existir
+        if(badgeTextEl) badgeTextEl.value = '';
+        if(badgeExpInput) badgeExpInput.value = '';
         if(document.getElementById('custom-logo')) document.getElementById('custom-logo').value = '';
-    } catch(e) { showToast(e.message, true); } finally { hideButtonSpinner(btn, 'Salvar no Mango'); }
+    } catch(e) { showToast(e.message, true); } finally { hideButtonSpinner(btn, 'Salvar Obra'); }
 };
 
-// Salvar Edição (Adicionado Gatilho Telegram)
+// Salvar Edição
 document.getElementById('edit-form').onsubmit = async (e) => {
     e.preventDefault(); const btn = document.getElementById('edit-save-btn'); showButtonSpinner(btn);
-    const docId = document.getElementById('edit-doc-id').value; const type = document.getElementById('edit-media-type').value;
+    const docId = document.getElementById('edit-doc-id').value; 
+    const type = document.getElementById('edit-media-type').value;
     
-    const editBadgeExpInput = document.getElementById('edit-badge-expiration').value;
-    const editBadgeExpiration = editBadgeExpInput ? new Date(editBadgeExpInput + 'T23:59:59').getTime() : 0;
+    const editBadgeExpInput = document.getElementById('edit-badge-expiration');
+    const editBadgeExpiration = (editBadgeExpInput && editBadgeExpInput.value) ? new Date(editBadgeExpInput.value + 'T23:59:59').getTime() : 0;
+    const badgeTextEl = document.getElementById('edit-badge-text');
 
     try {
         let p = { 
@@ -1443,8 +1596,8 @@ document.getElementById('edit-form').onsubmit = async (e) => {
             updatedAt: serverTimestamp(),
             poster: document.getElementById('edit-custom-poster').value,
             backdrop: document.getElementById('edit-custom-backdrop').value,
-            logo: document.getElementById('edit-custom-logo') ? document.getElementById('edit-custom-logo').value : '', // NOVO
-            badgeText: document.getElementById('edit-badge-text').value,
+            logo: document.getElementById('edit-custom-logo') ? document.getElementById('edit-custom-logo').value : '',
+            badgeText: badgeTextEl ? badgeTextEl.value : '',
             badgeExpiration: editBadgeExpiration
         };
         if(type === 'movie') {
@@ -1470,18 +1623,18 @@ document.getElementById('edit-form').onsubmit = async (e) => {
             });
             p.seasons = sMap;
         }
-        await updateDoc(doc(db, 'content', docId), p);
         
-        if (document.getElementById('notify-edit').checked) {
+        await updateDoc(doc(window.getDb(), 'content', docId), p);
+        
+        if (document.getElementById('notify-edit') && document.getElementById('notify-edit').checked) {
             await window.sendPushNotification(`content_${docId}`, 'Tem novidade! 📺', `${p.title} acaba de receber uma atualização!`);
-            
-            // Disparo Telegram Atualização
             const currentItemInfo = catalogData.find(i => i.id === docId);
             const synopsisToUse = currentItemInfo ? currentItemInfo.synopsis : 'Acesse o aplicativo para ver as novidades!';
             await window.sendToTelegram(p.title, synopsisToUse, p.poster, true);
         }
 
-        showToast('Editado com sucesso!'); setTimeout(()=> { window.location.hash = 'manageContent'; }, 1000);
+        showToast(`Editado com sucesso em ${window.currentManageSite.toUpperCase()}!`); 
+        setTimeout(()=> { window.location.hash = 'manageContent'; }, 1000);
     } catch(e) { showToast(e.message, true); } finally { hideButtonSpinner(btn, 'Salvar Alterações'); }
 };
 
@@ -1489,44 +1642,58 @@ document.getElementById('edit-form').onsubmit = async (e) => {
 // GERENCIADOR DE SELOS RÁPIDO 
 // ==========================================
 function initBadgeManagerLogic() {
-    window.renderBmList = function() {
-        const term = document.getElementById('bm-search').value.toLowerCase();
+    window.renderBmList = async function() {
+        const term = document.getElementById('bm-search').value.trim().toLowerCase();
         const list = document.getElementById('bm-list');
-        list.innerHTML = '';
+        list.innerHTML = '<div class="spinner mx-auto my-4 block"></div>';
+        
+        try {
+            // Busca os itens diretamente do banco para não depender da paginação local
+            const q = query(collection(window.getDb(), 'content'), limit(200));
+            const snap = await getDocs(q);
+            let items = [];
+            snap.forEach(d => items.push({ id: d.id, ...d.data() }));
 
-        const filtered = catalogData
-            .filter(i => i.title && i.title.toLowerCase().includes(term))
-            .sort((a,b) => a.title.localeCompare(b.title));
+            const filtered = items
+                .filter(i => i.title && i.title.toLowerCase().includes(term))
+                .sort((a,b) => a.title.localeCompare(b.title));
 
-        if(filtered.length === 0) {
-            list.innerHTML = '<p class="text-slate-400 text-center text-sm py-4">Nenhum anime encontrado.</p>';
-            return;
-        }
+            if(filtered.length === 0) {
+                list.innerHTML = '<p class="text-slate-400 text-center text-sm py-4">Nenhum anime encontrado.</p>';
+                return;
+            }
 
-        filtered.forEach(item => {
-            const isBadgeActive = item.badgeText && (item.badgeExpiration === 0 || item.badgeExpiration > Date.now());
-            const badgeHtml = isBadgeActive
-                ? `<span class="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] px-2 py-0.5 rounded font-bold">${item.badgeText}</span>`
-                : ``;
+            list.innerHTML = '';
+            filtered.forEach(item => {
+                const isBadgeActive = item.badgeText && (item.badgeExpiration === 0 || item.badgeExpiration > Date.now());
+                const badgeHtml = isBadgeActive
+                    ? `<span class="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] px-2 py-0.5 rounded font-bold">${item.badgeText}</span>`
+                    : ``;
 
-            const div = document.createElement('div');
-            div.className = 'flex items-center gap-3 p-3 bg-black/40 rounded-xl cursor-pointer hover:bg-amber-500/20 border border-transparent hover:border-amber-500/50 transition';
-            div.innerHTML = `
-                <img src="${item.poster || 'https://placehold.co/120x160/1c1917/999999?text=IMG'}" class="w-10 h-14 object-cover rounded shadow">
-                <div class="flex-1 min-w-0">
-                    <h4 class="font-bold text-white text-sm truncate">${escapeHTML(item.title)}</h4>
-                    <div class="flex items-center gap-2 mt-1">
-                        <p class="text-[10px] text-slate-400 uppercase">${item.type === 'tv' ? 'Série' : 'Filme'}</p>
-                        ${badgeHtml}
+                const div = document.createElement('div');
+                div.className = 'flex items-center gap-3 p-3 bg-black/40 rounded-xl cursor-pointer hover:bg-amber-500/20 border border-transparent hover:border-amber-500/50 transition';
+                div.innerHTML = `
+                    <img src="${item.poster || 'https://placehold.co/120x160/1c1917/999999?text=IMG'}" class="w-10 h-14 object-cover rounded shadow">
+                    <div class="flex-1 min-w-0">
+                        <h4 class="font-bold text-white text-sm truncate">${escapeHTML(item.title)}</h4>
+                        <div class="flex items-center gap-2 mt-1">
+                            <p class="text-[10px] text-slate-400 uppercase">${item.type === 'tv' ? 'Série' : 'Filme'}</p>
+                            ${badgeHtml}
+                        </div>
                     </div>
-                </div>
-            `;
-            div.onclick = () => selectBmItem(item);
-            list.appendChild(div);
-        });
+                `;
+                div.onclick = () => selectBmItem(item);
+                list.appendChild(div);
+            });
+        } catch (e) {
+            list.innerHTML = '<p class="text-red-400 text-center text-sm py-4">Erro ao carregar lista.</p>';
+        }
     };
 
-    document.getElementById('bm-search').addEventListener('input', renderBmList);
+    document.getElementById('bm-search').addEventListener('input', () => {
+        clearTimeout(window.bmSearchTimeout);
+        window.bmSearchTimeout = setTimeout(renderBmList, 500);
+    });
 
     window.selectBmItem = function(item) {
         document.getElementById('bm-editor-empty').classList.add('hidden');
@@ -1577,11 +1744,12 @@ function initBadgeManagerLogic() {
 
         showButtonSpinner(btn);
         try {
-            await updateDoc(doc(db, 'content', id), {
+            await updateDoc(doc(window.getDb(), 'content', id), {
                 badgeText: text,
                 badgeExpiration: expirationTs
             });
             showToast("Selo atualizado com sucesso!");
+            renderBmList(); // Atualiza a lista com as mudanças
         } catch (err) {
             console.error(err);
             showToast("Erro ao atualizar o selo.", true);
@@ -1604,23 +1772,36 @@ function initCarouselLogic() {
     const grid = document.getElementById('carousel-items-grid');
     let pendingAiCarousels = []; 
     
-    onSnapshot(collection(db, 'carousels'), (snapshot) => {
+    unsubCarousels = onSnapshot(collection(window.getDb(), 'carousels'), (snapshot) => {
         carouselsData = [];
         snapshot.forEach(doc => carouselsData.push({ id: doc.id, ...doc.data() }));
         renderSavedCarousels();
     });
 
-    function renderGrid() {
+    async function renderGrid() {
         if(!grid) return;
-        grid.innerHTML = '';
-        catalogData.forEach(item => {
-            const div = document.createElement('label'); div.className = "cursor-pointer relative";
-            div.innerHTML = `<input type="checkbox" class="catalog-check sr-only" value="${item.id}"><div class="p-2 border border-slate-700/50 rounded-lg hover:border-amber-500/50 transition-colors bg-slate-900/50"><img src="${item.poster}" class="w-full aspect-[2/3] object-cover rounded shadow mb-2"><p class="text-xs text-center text-white font-bold truncate">${item.title}</p><svg class="check-icon hidden absolute top-4 right-4 w-6 h-6 text-amber-500 bg-black/50 rounded-full" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg></div>`;
-            grid.appendChild(div);
-        });
+        
+        // Pega todos/os mais recentes conteúdos p/ não ficar limitado a 24
+        try {
+            const snap = await getDocs(query(collection(window.getDb(), 'content'), orderBy('updatedAt', 'desc'), limit(300)));
+            const allContentForCarousel = [];
+            snap.forEach(d => allContentForCarousel.push({id: d.id, ...d.data()}));
+            
+            grid.innerHTML = '';
+            allContentForCarousel.forEach(item => {
+                const div = document.createElement('label'); div.className = "cursor-pointer relative";
+                div.innerHTML = `<input type="checkbox" class="catalog-check sr-only" value="${item.id}"><div class="p-2 border border-slate-700/50 rounded-lg hover:border-amber-500/50 transition-colors bg-slate-900/50"><img src="${item.poster}" class="w-full aspect-[2/3] object-cover rounded shadow mb-2"><p class="text-xs text-center text-white font-bold truncate">${item.title}</p><svg class="check-icon hidden absolute top-4 right-4 w-6 h-6 text-amber-500 bg-black/50 rounded-full" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg></div>`;
+                grid.appendChild(div);
+            });
+        } catch(e) {}
     }
     
-    const cInt = setInterval(() => { if(catalogData.length > 0) { clearInterval(cInt); renderGrid(); } }, 500);
+    // Atualiza grid quando a aba for ativada
+    document.querySelector('.nav-link[data-page="carousels"]')?.addEventListener('click', () => {
+        renderGrid();
+    });
+    // E no primeiro load
+    setTimeout(() => { if(document.getElementById('carousels')?.classList.contains('active')) renderGrid(); }, 1500);
 
     function renderSavedCarousels() {
         const list = document.getElementById('saved-carousels-list');
@@ -1659,19 +1840,19 @@ function initCarouselLogic() {
 
     window.deleteCarousel = function(id) {
         showConfirm('Apagar Carrossel', 'Deseja apagar esta categoria da Home do App?', async () => {
-            await deleteDoc(doc(db, 'carousels', id));
+            await deleteDoc(doc(window.getDb(), 'carousels', id));
             showToast('Carrossel apagado!');
         });
     };
 
     window.deleteAllCarousels = function() {
-        showConfirm('Apagar TODOS', 'Tem certeza absoluta? Isso excluirá todas as categorias (manuais e geradas por IA) da tela inicial do seu app.', async () => {
+        showConfirm('Apagar TODOS', 'Tem certeza absoluta? Isso excluirá todas as categorias (manuais e geradas por IA).', async () => {
             try {
-                const snap = await getDocs(collection(db, 'carousels'));
+                const snap = await getDocs(collection(window.getDb(), 'carousels'));
                 if (snap.empty) return showToast('Nenhum carrossel para apagar.');
                 
                 showToast('Apagando todos os carrosséis...');
-                const deletePromises = snap.docs.map(d => deleteDoc(doc(db, 'carousels', d.id)));
+                const deletePromises = snap.docs.map(d => deleteDoc(doc(window.getDb(), 'carousels', d.id)));
                 await Promise.all(deletePromises);
                 
                 showToast('Todos os carrosséis foram apagados!');
@@ -1706,14 +1887,21 @@ function initCarouselLogic() {
 
         if(aiModel === 'gemini' && !geminiKey) return showToast("Por favor, insira a chave da API do Gemini.", true);
         if(aiModel === 'groq' && !groqKey) return showToast("Por favor, insira a chave da API da Groq.", true);
-        if(catalogData.length === 0) return showToast("Seu catálogo está vazio.", true);
+        
+        // Puxa lista para dar para IA
+        const snap = await getDocs(query(collection(window.getDb(), 'content'), limit(300)));
+        const simpleCat = [];
+        snap.forEach(d => {
+            const data = d.data();
+            simpleCat.push({ id: d.id, title: data.title, gen: (data.genres||[]).join(',') });
+        });
+
+        if(simpleCat.length === 0) return showToast("Seu catálogo está vazio.", true);
         
         if(geminiKey) localStorage.setItem('mango_gemini_key', geminiKey); 
         if(groqKey) localStorage.setItem('mango_groq_key', groqKey); 
 
         showButtonSpinner(btn);
-        
-        const simpleCat = catalogData.map(c => ({ id: c.id, title: c.title, gen: c.genres.join(',') }));
         
         const sysPrompt = `Você é um curador especialista em animes e filmes. Analise o seguinte catálogo: ${JSON.stringify(simpleCat)}.
         Sua tarefa é criar EXATAMENTE ${qty} categorias temáticas.
@@ -1821,10 +2009,12 @@ function initCarouselLogic() {
             const div = document.createElement('div');
             div.className = "p-4 bg-black/40 rounded-xl border border-pink-500/30 mb-3";
             
+            // Note: because catalogData is paginated, we might not have all items locally to show image
+            // We just render placeholder if not found in current memory
             const imagesHtml = c.items.map(itemId => {
                 const catItem = catalogData.find(x => x.id === itemId);
                 if(catItem) return `<img src="${catItem.poster}" class="w-10 h-14 object-cover rounded shadow border border-slate-700" title="${escapeHTML(catItem.title)}">`;
-                return '';
+                return `<div class="w-10 h-14 bg-slate-800 rounded shadow border border-slate-700 flex items-center justify-center"><span class="text-[10px] text-slate-500">ID</span></div>`;
             }).join('');
 
             div.innerHTML = `
@@ -1864,12 +2054,12 @@ function initCarouselLogic() {
                     });
                 });
 
-                const oldDocs = await getDocs(query(collection(db, 'carousels'), where('isAiGenerated', '==', true)));
-                const deletePromises = oldDocs.docs.map(d => deleteDoc(doc(db, 'carousels', d.id)));
+                const oldDocs = await getDocs(query(collection(window.getDb(), 'carousels'), where('isAiGenerated', '==', true)));
+                const deletePromises = oldDocs.docs.map(d => deleteDoc(doc(window.getDb(), 'carousels', d.id)));
                 await Promise.all(deletePromises);
 
                 const savePromises = finalCarousels.map(c => {
-                    return addDoc(collection(db, 'carousels'), {
+                    return addDoc(collection(window.getDb(), 'carousels'), {
                         title: c.title,
                         items: c.items,
                         isAiGenerated: true,
@@ -1891,12 +2081,12 @@ function initCarouselLogic() {
     }
 
     async function saveAllPendingCarouselsDirectly(carouselsArray) {
-        const oldDocs = await getDocs(query(collection(db, 'carousels'), where('isAiGenerated', '==', true)));
-        const deletePromises = oldDocs.docs.map(d => deleteDoc(doc(db, 'carousels', d.id)));
+        const oldDocs = await getDocs(query(collection(window.getDb(), 'carousels'), where('isAiGenerated', '==', true)));
+        const deletePromises = oldDocs.docs.map(d => deleteDoc(doc(window.getDb(), 'carousels', d.id)));
         await Promise.all(deletePromises);
 
         const savePromises = carouselsArray.map(c => {
-            return addDoc(collection(db, 'carousels'), {
+            return addDoc(collection(window.getDb(), 'carousels'), {
                 title: c.title,
                 items: c.items,
                 isAiGenerated: true,
@@ -1907,26 +2097,28 @@ function initCarouselLogic() {
         showToast(`A IA gerou ${carouselsArray.length} categorias com sucesso!`);
     }
 
-    document.getElementById('save-carousel-btn').onclick = async () => {
-        const title = document.getElementById('carousel-title').value.trim();
-        const selected = Array.from(document.querySelectorAll('.catalog-check:checked')).map(c => c.value);
-        const id = document.getElementById('carousel-edit-id').value;
-        const btn = document.getElementById('save-carousel-btn');
+    const saveCarouselBtn = document.getElementById('save-carousel-btn');
+    if(saveCarouselBtn) {
+        saveCarouselBtn.onclick = async () => {
+            const title = document.getElementById('carousel-title').value.trim();
+            const selected = Array.from(document.querySelectorAll('.catalog-check:checked')).map(c => c.value);
+            const id = document.getElementById('carousel-edit-id').value;
 
-        if(!title || !selected.length) return showToast("Preencha título e marque itens.", true);
-        
-        showButtonSpinner(btn);
-        try {
-            if (id) {
-                await updateDoc(doc(db, 'carousels', id), { title: title, items: selected, updatedAt: serverTimestamp() });
-                showToast("Carrossel Atualizado!");
-            } else {
-                await addDoc(collection(db, 'carousels'), { title: title, items: selected, isAiGenerated: false, createdAt: serverTimestamp() });
-                showToast("Carrossel Criado!");
-            }
-            clearCarouselEdit();
-        } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(btn, 'Salvar Carrossel'); }
-    };
+            if(!title || !selected.length) return showToast("Preencha título e marque itens.", true);
+            
+            showButtonSpinner(saveCarouselBtn);
+            try {
+                if (id) {
+                    await updateDoc(doc(window.getDb(), 'carousels', id), { title: title, items: selected, updatedAt: serverTimestamp() });
+                    showToast("Carrossel Atualizado!");
+                } else {
+                    await addDoc(collection(window.getDb(), 'carousels'), { title: title, items: selected, isAiGenerated: false, createdAt: serverTimestamp() });
+                    showToast("Carrossel Criado!");
+                }
+                clearCarouselEdit();
+            } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(saveCarouselBtn, 'Salvar Carrossel'); }
+        };
+    }
 }
 
 // ==========================================
@@ -1937,7 +2129,7 @@ function initAvatarLogic() {
     let cropperInstance = null;
     let currentCropIndex = -1;
 
-    onSnapshot(collection(db, 'avatar_groups'), (snapshot) => {
+    unsubAvatars = onSnapshot(collection(window.getDb(), 'avatar_groups'), (snapshot) => {
         avatarGroupsData = [];
         snapshot.forEach(doc => avatarGroupsData.push({ id: doc.id, ...doc.data() }));
         renderSavedAvatarGroups();
@@ -1945,6 +2137,7 @@ function initAvatarLogic() {
 
     function renderSavedAvatarGroups() {
         const list = document.getElementById('saved-avatar-groups-list');
+        if(!list) return;
         list.innerHTML = '';
         if (avatarGroupsData.length === 0) {
             list.innerHTML = '<p class="text-sm text-slate-400">Nenhum grupo de avatar salvo.</p>';
@@ -1966,31 +2159,33 @@ function initAvatarLogic() {
         });
     }
 
-    document.getElementById('avatar-tmdb-search-btn').onclick = async () => {
-        const q = document.getElementById('avatar-tmdb-search').value.trim();
-        if(!q) return;
-        
-        const btn = document.getElementById('avatar-tmdb-search-btn');
-        showButtonSpinner(btn);
-        const res = document.getElementById('avatar-tmdb-results');
-        res.innerHTML = '<div class="spinner-lg mx-auto"></div>';
+    const searchTmdbBtn = document.getElementById('avatar-tmdb-search-btn');
+    if(searchTmdbBtn) {
+        searchTmdbBtn.onclick = async () => {
+            const q = document.getElementById('avatar-tmdb-search').value.trim();
+            if(!q) return;
+            
+            showButtonSpinner(searchTmdbBtn);
+            const res = document.getElementById('avatar-tmdb-results');
+            res.innerHTML = '<div class="spinner-lg mx-auto"></div>';
 
-        const data = await fetchTMDB('search/multi', `query=${encodeURIComponent(q)}`);
-        hideButtonSpinner(btn, 'Buscar Imagens');
-        res.innerHTML = '';
+            const data = await fetchTMDB('search/multi', `query=${encodeURIComponent(q)}`);
+            hideButtonSpinner(searchTmdbBtn, 'Buscar Imagens');
+            res.innerHTML = '';
 
-        if(data && data.results) {
-            const valid = data.results.filter(i => (i.media_type === 'tv' || i.media_type === 'movie') && i.poster_path);
-            if(!valid.length) { res.innerHTML = '<p class="text-slate-400 text-center text-sm">Nenhum resultado.</p>'; return; }
-            valid.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'flex items-center gap-3 p-2 bg-black/40 rounded-xl cursor-pointer hover:bg-indigo-500/20 border border-transparent hover:border-indigo-500/50 transition-colors';
-                div.innerHTML = `<img src="${TMDB_IMG_URL}${item.poster_path}" class="w-10 h-14 object-cover rounded shadow-md"><div><h4 class="font-bold text-white text-sm">${item.name||item.title}</h4><p class="text-xs text-indigo-400">${item.media_type === 'tv' ? 'Série' : 'Filme'}</p></div>`;
-                div.onclick = () => fetchTmdbPostersForAvatars(item.id, item.media_type, item.name||item.title);
-                res.appendChild(div);
-            });
-        }
-    };
+            if(data && data.results) {
+                const valid = data.results.filter(i => (i.media_type === 'tv' || i.media_type === 'movie') && i.poster_path);
+                if(!valid.length) { res.innerHTML = '<p class="text-slate-400 text-center text-sm">Nenhum resultado.</p>'; return; }
+                valid.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center gap-3 p-2 bg-black/40 rounded-xl cursor-pointer hover:bg-indigo-500/20 border border-transparent hover:border-indigo-500/50 transition-colors';
+                    div.innerHTML = `<img src="${TMDB_IMG_URL}${item.poster_path}" class="w-10 h-14 object-cover rounded shadow-md"><div><h4 class="font-bold text-white text-sm">${item.name||item.title}</h4><p class="text-xs text-indigo-400">${item.media_type === 'tv' ? 'Série' : 'Filme'}</p></div>`;
+                    div.onclick = () => fetchTmdbPostersForAvatars(item.id, item.media_type, item.name||item.title);
+                    res.appendChild(div);
+                });
+            }
+        };
+    }
 
     async function fetchTmdbPostersForAvatars(id, type, title) {
         document.getElementById('avatar-group-title').value = title;
@@ -2020,28 +2215,31 @@ function initAvatarLogic() {
     let autoPasteEnabled = false;
     let lastClipboardText = "";
 
-    document.getElementById('auto-paste-toggle').addEventListener('change', async function() {
-        const statusText = document.getElementById('auto-paste-status');
-        autoPasteEnabled = this.checked;
-        
-        if (autoPasteEnabled) {
-            statusText.textContent = "Ligado (Foque na aba ou dê Ctrl+V)";
-            statusText.classList.replace("text-slate-400", "text-emerald-400");
-            try {
-                lastClipboardText = await navigator.clipboard.readText();
-                showToast("Modo Auto-Captura ligado! Copie links e volte aqui.");
-            } catch (e) {
-                showToast("Permita o acesso à área de transferência, ou use Ctrl+V na página.", true);
+    const autoPasteToggle = document.getElementById('auto-paste-toggle');
+    if (autoPasteToggle) {
+        autoPasteToggle.addEventListener('change', async function() {
+            const statusText = document.getElementById('auto-paste-status');
+            autoPasteEnabled = this.checked;
+            
+            if (autoPasteEnabled) {
+                statusText.textContent = "Ligado (Foque na aba ou dê Ctrl+V)";
+                statusText.classList.replace("text-slate-400", "text-emerald-400");
+                try {
+                    lastClipboardText = await navigator.clipboard.readText();
+                    showToast("Modo Auto-Captura ligado! Copie links e volte aqui.");
+                } catch (e) {
+                    showToast("Permita o acesso à área de transferência, ou use Ctrl+V na página.", true);
+                }
+            } else {
+                statusText.textContent = "Desligado";
+                statusText.classList.replace("text-emerald-400", "text-slate-400");
             }
-        } else {
-            statusText.textContent = "Desligado";
-            statusText.classList.replace("text-emerald-400", "text-slate-400");
-        }
-    });
+        });
+    }
 
     window.addEventListener('focus', async () => {
         if (!autoPasteEnabled) return;
-        if (!document.getElementById('avatarPage').classList.contains('active')) return;
+        if (!document.getElementById('avatarPage')?.classList.contains('active')) return;
         try {
             const text = await navigator.clipboard.readText();
             processAutoPaste(text);
@@ -2050,7 +2248,7 @@ function initAvatarLogic() {
 
     window.addEventListener('paste', (e) => {
         if (!autoPasteEnabled) return;
-        if (!document.getElementById('avatarPage').classList.contains('active')) return;
+        if (!document.getElementById('avatarPage')?.classList.contains('active')) return;
         
         const activeTag = document.activeElement.tagName;
         if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
@@ -2071,22 +2269,27 @@ function initAvatarLogic() {
         }
     }
 
-    document.getElementById('add-manual-avatar-btn').onclick = () => {
-        const urlInput = document.getElementById('manual-avatar-url');
-        const text = urlInput.value.trim();
-        if(text) { 
-            const urls = text.split(/[\n,;]+/).map(u => u.trim()).filter(u => u.startsWith('http'));
-            if (urls.length > 0) {
-                currentAvatarUrls = [...currentAvatarUrls, ...urls];
-                renderAvatarEditorGrid();
+    const addManualAvatarBtn = document.getElementById('add-manual-avatar-btn');
+    if (addManualAvatarBtn) {
+        addManualAvatarBtn.onclick = () => {
+            const urlInput = document.getElementById('manual-avatar-url');
+            const text = urlInput.value.trim();
+            if(text) { 
+                const urls = text.split(/[\n,;]+/).map(u => u.trim()).filter(u => u.startsWith('http'));
+                if (urls.length > 0) {
+                    currentAvatarUrls = [...currentAvatarUrls, ...urls];
+                    renderAvatarEditorGrid();
+                }
+                urlInput.value = ''; 
             }
-            urlInput.value = ''; 
-        }
+        };
     }
 
     function renderAvatarEditorGrid() {
         const grid = document.getElementById('avatar-editor-grid');
-        document.getElementById('avatar-count-badge').textContent = currentAvatarUrls.length;
+        if(!grid) return;
+        const countBadge = document.getElementById('avatar-count-badge');
+        if(countBadge) countBadge.textContent = currentAvatarUrls.length;
         grid.innerHTML = '';
         
         currentAvatarUrls.forEach((url, index) => {
@@ -2218,7 +2421,7 @@ function initAvatarLogic() {
 
     window.deleteAvatarGroup = function(id) {
         showConfirm('Apagar Grupo', 'Deseja apagar este grupo de avatares?', async () => {
-            await deleteDoc(doc(db, 'avatar_groups', id));
+            await deleteDoc(doc(window.getDb(), 'avatar_groups', id));
             if (document.getElementById('avatar-group-id').value === id) window.clearAvatarEdit();
             showToast('Grupo apagado!');
         });
@@ -2234,34 +2437,36 @@ function initAvatarLogic() {
         document.getElementById('save-avatar-group-btn').querySelector('.button-text').textContent = "Salvar Grupo de Avatares";
     }
 
-    document.getElementById('save-avatar-group-btn').onclick = async () => {
-        const title = document.getElementById('avatar-group-title').value.trim();
-        const id = document.getElementById('avatar-group-id').value;
-        const btn = document.getElementById('save-avatar-group-btn');
+    const saveAvatarBtn = document.getElementById('save-avatar-group-btn');
+    if(saveAvatarBtn) {
+        saveAvatarBtn.onclick = async () => {
+            const title = document.getElementById('avatar-group-title').value.trim();
+            const id = document.getElementById('avatar-group-id').value;
 
-        if(!title || currentAvatarUrls.length === 0) return showToast("Preencha o título e adicione imagens.", true);
-        
-        showButtonSpinner(btn);
-        try {
-            if (id) {
-                await updateDoc(doc(db, 'avatar_groups', id), { title: title, avatars: currentAvatarUrls, updatedAt: serverTimestamp() });
-                showToast("Grupo Atualizado!");
-            } else {
-                await addDoc(collection(db, 'avatar_groups'), { title: title, avatars: currentAvatarUrls, createdAt: serverTimestamp() });
-                showToast("Grupo Criado!");
-            }
-            window.clearAvatarEdit();
-        } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(btn, 'Salvar Grupo de Avatares'); }
-    };
+            if(!title || currentAvatarUrls.length === 0) return showToast("Preencha o título e adicione imagens.", true);
+            
+            showButtonSpinner(saveAvatarBtn);
+            try {
+                if (id) {
+                    await updateDoc(doc(window.getDb(), 'avatar_groups', id), { title: title, avatars: currentAvatarUrls, updatedAt: serverTimestamp() });
+                    showToast("Grupo Atualizado!");
+                } else {
+                    await addDoc(collection(window.getDb(), 'avatar_groups'), { title: title, avatars: currentAvatarUrls, createdAt: serverTimestamp() });
+                    showToast("Grupo Criado!");
+                }
+                window.clearAvatarEdit();
+            } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(saveAvatarBtn, 'Salvar Grupo de Avatares'); }
+        };
+    }
 }
 
 // ==========================================
-// LÓGICA DA ABA DE FUNDOS DE PERFIL
+// LÓGICA DA ABA DE FUNDOS DE PERFIL E VERTICAIS
 // ==========================================
 function initBackgroundLogic() {
     let currentBgUrls = [];
 
-    onSnapshot(collection(db, 'background_groups'), (snapshot) => {
+    unsubBgs = onSnapshot(collection(window.getDb(), 'background_groups'), (snapshot) => {
         backgroundGroupsData = [];
         snapshot.forEach(doc => backgroundGroupsData.push({ id: doc.id, ...doc.data() }));
         renderSavedBgGroups();
@@ -2269,6 +2474,7 @@ function initBackgroundLogic() {
 
     function renderSavedBgGroups() {
         const list = document.getElementById('saved-bg-groups-list');
+        if(!list) return;
         list.innerHTML = '';
         if (backgroundGroupsData.length === 0) {
             list.innerHTML = '<p class="text-sm text-slate-400">Nenhum grupo de fundo salvo.</p>';
@@ -2290,31 +2496,33 @@ function initBackgroundLogic() {
         });
     }
 
-    document.getElementById('bg-tmdb-search-btn').onclick = async () => {
-        const q = document.getElementById('bg-tmdb-search').value.trim();
-        if(!q) return;
-        
-        const btn = document.getElementById('bg-tmdb-search-btn');
-        showButtonSpinner(btn);
-        const res = document.getElementById('bg-tmdb-results');
-        res.innerHTML = '<div class="spinner-lg mx-auto"></div>';
+    const searchTmdbBtn = document.getElementById('bg-tmdb-search-btn');
+    if(searchTmdbBtn) {
+        searchTmdbBtn.onclick = async () => {
+            const q = document.getElementById('bg-tmdb-search').value.trim();
+            if(!q) return;
+            
+            showButtonSpinner(searchTmdbBtn);
+            const res = document.getElementById('bg-tmdb-results');
+            res.innerHTML = '<div class="spinner-lg mx-auto"></div>';
 
-        const data = await fetchTMDB('search/multi', `query=${encodeURIComponent(q)}`);
-        hideButtonSpinner(btn, 'Buscar Fundos');
-        res.innerHTML = '';
+            const data = await fetchTMDB('search/multi', `query=${encodeURIComponent(q)}`);
+            hideButtonSpinner(searchTmdbBtn, 'Buscar Fundos');
+            res.innerHTML = '';
 
-        if(data && data.results) {
-            const valid = data.results.filter(i => (i.media_type === 'tv' || i.media_type === 'movie') && i.poster_path);
-            if(!valid.length) { res.innerHTML = '<p class="text-slate-400 text-center text-sm">Nenhum resultado.</p>'; return; }
-            valid.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'flex items-center gap-3 p-2 bg-black/40 rounded-xl cursor-pointer hover:bg-cyan-500/20 border border-transparent hover:border-cyan-500/50 transition-colors';
-                div.innerHTML = `<img src="${TMDB_IMG_URL}${item.poster_path}" class="w-10 h-14 object-cover rounded shadow-md"><div><h4 class="font-bold text-white text-sm">${item.name||item.title}</h4><p class="text-xs text-cyan-400">${item.media_type === 'tv' ? 'Série' : 'Filme'}</p></div>`;
-                div.onclick = () => fetchTmdbBackdrops(item.id, item.media_type, item.name||item.title);
-                res.appendChild(div);
-            });
-        }
-    };
+            if(data && data.results) {
+                const valid = data.results.filter(i => (i.media_type === 'tv' || i.media_type === 'movie') && i.poster_path);
+                if(!valid.length) { res.innerHTML = '<p class="text-slate-400 text-center text-sm">Nenhum resultado.</p>'; return; }
+                valid.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center gap-3 p-2 bg-black/40 rounded-xl cursor-pointer hover:bg-cyan-500/20 border border-transparent hover:border-cyan-500/50 transition-colors';
+                    div.innerHTML = `<img src="${TMDB_IMG_URL}${item.poster_path}" class="w-10 h-14 object-cover rounded shadow-md"><div><h4 class="font-bold text-white text-sm">${item.name||item.title}</h4><p class="text-xs text-cyan-400">${item.media_type === 'tv' ? 'Série' : 'Filme'}</p></div>`;
+                    div.onclick = () => fetchTmdbBackdrops(item.id, item.media_type, item.name||item.title);
+                    res.appendChild(div);
+                });
+            }
+        };
+    }
 
     async function fetchTmdbBackdrops(id, type, title) {
         document.getElementById('bg-group-title').value = title;
@@ -2334,19 +2542,24 @@ function initBackgroundLogic() {
         }
     }
 
-    document.getElementById('add-manual-bg-btn').onclick = () => {
-        const urlInput = document.getElementById('manual-bg-url');
-        const url = urlInput.value.trim();
-        if(url) { 
-            currentBgUrls.push(url); 
-            renderBgEditorGrid(); 
-            urlInput.value = ''; 
+    const addManualBgBtn = document.getElementById('add-manual-bg-btn');
+    if(addManualBgBtn) {
+        addManualBgBtn.onclick = () => {
+            const urlInput = document.getElementById('manual-bg-url');
+            const url = urlInput.value.trim();
+            if(url) { 
+                currentBgUrls.push(url); 
+                renderBgEditorGrid(); 
+                urlInput.value = ''; 
+            }
         }
     }
 
     function renderBgEditorGrid() {
         const grid = document.getElementById('bg-editor-grid');
-        document.getElementById('bg-count-badge').textContent = currentBgUrls.length;
+        if(!grid) return;
+        const badgeCount = document.getElementById('bg-count-badge');
+        if(badgeCount) badgeCount.textContent = currentBgUrls.length;
         grid.innerHTML = '';
         
         currentBgUrls.forEach((url, index) => {
@@ -2377,7 +2590,7 @@ function initBackgroundLogic() {
 
     window.deleteBgGroup = function(id) {
         showConfirm('Apagar Grupo', 'Deseja apagar este grupo de fundos?', async () => {
-            await deleteDoc(doc(db, 'background_groups', id));
+            await deleteDoc(doc(window.getDb(), 'background_groups', id));
             if (document.getElementById('bg-group-id').value === id) window.clearBgEdit();
             showToast('Grupo apagado!');
         });
@@ -2393,34 +2606,33 @@ function initBackgroundLogic() {
         document.getElementById('save-bg-group-btn').querySelector('.button-text').textContent = "Salvar Grupo de Fundos";
     }
 
-    document.getElementById('save-bg-group-btn').onclick = async () => {
-        const title = document.getElementById('bg-group-title').value.trim();
-        const id = document.getElementById('bg-group-id').value;
-        const btn = document.getElementById('save-bg-group-btn');
+    const saveBgBtn = document.getElementById('save-bg-group-btn');
+    if(saveBgBtn) {
+        saveBgBtn.onclick = async () => {
+            const title = document.getElementById('bg-group-title').value.trim();
+            const id = document.getElementById('bg-group-id').value;
 
-        if(!title || currentBgUrls.length === 0) return showToast("Preencha o título e adicione imagens.", true);
-        
-        showButtonSpinner(btn);
-        try {
-            if (id) {
-                await updateDoc(doc(db, 'background_groups', id), { title: title, backgrounds: currentBgUrls, updatedAt: serverTimestamp() });
-                showToast("Grupo Atualizado!");
-            } else {
-                await addDoc(collection(db, 'background_groups'), { title: title, backgrounds: currentBgUrls, createdAt: serverTimestamp() });
-                showToast("Grupo Criado!");
-            }
-            window.clearBgEdit();
-        } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(btn, 'Salvar Grupo de Fundos'); }
-    };
+            if(!title || currentBgUrls.length === 0) return showToast("Preencha o título e adicione imagens.", true);
+            
+            showButtonSpinner(saveBgBtn);
+            try {
+                if (id) {
+                    await updateDoc(doc(window.getDb(), 'background_groups', id), { title: title, backgrounds: currentBgUrls, updatedAt: serverTimestamp() });
+                    showToast("Grupo Atualizado!");
+                } else {
+                    await addDoc(collection(window.getDb(), 'background_groups'), { title: title, backgrounds: currentBgUrls, createdAt: serverTimestamp() });
+                    showToast("Grupo Criado!");
+                }
+                window.clearBgEdit();
+            } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(saveBgBtn, 'Salvar Grupo de Fundos'); }
+        };
+    }
 }
 
-// ==========================================
-// LÓGICA DA ABA DE FUNDOS VERTICAIS (QUEM ASSISTE)
-// ==========================================
 function initVerticalBgLogic() {
     let currentVerticalUrls = [];
 
-    onSnapshot(collection(db, 'vertical_bg_groups'), (snapshot) => {
+    unsubVerticalBgs = onSnapshot(collection(window.getDb(), 'vertical_bg_groups'), (snapshot) => {
         verticalGroupsData = [];
         snapshot.forEach(doc => verticalGroupsData.push({ id: doc.id, ...doc.data() }));
         renderSavedVerticalGroups();
@@ -2428,6 +2640,7 @@ function initVerticalBgLogic() {
 
     function renderSavedVerticalGroups() {
         const list = document.getElementById('saved-vertical-groups-list');
+        if(!list) return;
         list.innerHTML = '';
         if (verticalGroupsData.length === 0) {
             list.innerHTML = '<p class="text-sm text-slate-400">Nenhum grupo salvo.</p>';
@@ -2449,36 +2662,38 @@ function initVerticalBgLogic() {
         });
     }
 
-    document.getElementById('vertical-tmdb-search-btn').onclick = async () => {
-        const q = document.getElementById('vertical-tmdb-search').value.trim();
-        if(!q) return;
-        
-        const btn = document.getElementById('vertical-tmdb-search-btn');
-        showButtonSpinner(btn);
-        const res = document.getElementById('vertical-tmdb-results');
-        res.innerHTML = '<div class="spinner-lg mx-auto"></div>';
+    const searchTmdbBtn = document.getElementById('vertical-tmdb-search-btn');
+    if(searchTmdbBtn) {
+        searchTmdbBtn.onclick = async () => {
+            const q = document.getElementById('vertical-tmdb-search').value.trim();
+            if(!q) return;
+            
+            showButtonSpinner(searchTmdbBtn);
+            const res = document.getElementById('vertical-tmdb-results');
+            res.innerHTML = '<div class="spinner-lg mx-auto"></div>';
 
-        const data = await fetchTMDB('search/multi', `query=${encodeURIComponent(q)}`);
-        hideButtonSpinner(btn, 'Buscar Capas Verticais');
-        res.innerHTML = '';
+            const data = await fetchTMDB('search/multi', `query=${encodeURIComponent(q)}`);
+            hideButtonSpinner(searchTmdbBtn, 'Buscar Capas Verticais');
+            res.innerHTML = '';
 
-        if(data && data.results) {
-            const valid = data.results.filter(i => (i.media_type === 'tv' || i.media_type === 'movie') && i.poster_path);
-            if(!valid.length) { res.innerHTML = '<p class="text-slate-400 text-center text-sm">Nenhum resultado.</p>'; return; }
-            valid.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'flex items-center gap-3 p-2 bg-black/40 rounded-xl cursor-pointer hover:bg-fuchsia-500/20 border border-transparent hover:border-fuchsia-500/50 transition-colors';
-                div.innerHTML = `
-                    <img src="${TMDB_IMG_URL}${item.poster_path}" class="w-10 h-14 object-cover rounded shadow-md">
-                    <div>
-                        <h4 class="font-bold text-white text-sm">${item.name||item.title}</h4>
-                        <p class="text-xs text-fuchsia-400">${item.media_type === 'tv' ? 'Série' : 'Filme'}</p>
-                    </div>`;
-                div.onclick = () => fetchTmdbVerticalPosters(item.id, item.media_type, item.name||item.title);
-                res.appendChild(div);
-            });
-        }
-    };
+            if(data && data.results) {
+                const valid = data.results.filter(i => (i.media_type === 'tv' || i.media_type === 'movie') && i.poster_path);
+                if(!valid.length) { res.innerHTML = '<p class="text-slate-400 text-center text-sm">Nenhum resultado.</p>'; return; }
+                valid.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center gap-3 p-2 bg-black/40 rounded-xl cursor-pointer hover:bg-fuchsia-500/20 border border-transparent hover:border-fuchsia-500/50 transition-colors';
+                    div.innerHTML = `
+                        <img src="${TMDB_IMG_URL}${item.poster_path}" class="w-10 h-14 object-cover rounded shadow-md">
+                        <div>
+                            <h4 class="font-bold text-white text-sm">${item.name||item.title}</h4>
+                            <p class="text-xs text-fuchsia-400">${item.media_type === 'tv' ? 'Série' : 'Filme'}</p>
+                        </div>`;
+                    div.onclick = () => fetchTmdbVerticalPosters(item.id, item.media_type, item.name||item.title);
+                    res.appendChild(div);
+                });
+            }
+        };
+    }
 
     async function fetchTmdbVerticalPosters(id, type, title) {
         document.getElementById('vertical-group-title').value = title;
@@ -2498,19 +2713,24 @@ function initVerticalBgLogic() {
         }
     }
 
-    document.getElementById('add-manual-vertical-btn').onclick = () => {
-        const urlInput = document.getElementById('manual-vertical-url');
-        const url = urlInput.value.trim();
-        if(url) { 
-            currentVerticalUrls.push(url); 
-            renderVerticalEditorGrid(); 
-            urlInput.value = ''; 
+    const addManualVerticalBtn = document.getElementById('add-manual-vertical-btn');
+    if(addManualVerticalBtn) {
+        addManualVerticalBtn.onclick = () => {
+            const urlInput = document.getElementById('manual-vertical-url');
+            const url = urlInput.value.trim();
+            if(url) { 
+                currentVerticalUrls.push(url); 
+                renderVerticalEditorGrid(); 
+                urlInput.value = ''; 
+            }
         }
     }
 
     function renderVerticalEditorGrid() {
         const grid = document.getElementById('vertical-editor-grid');
-        document.getElementById('vertical-count-badge').textContent = currentVerticalUrls.length;
+        if(!grid) return;
+        const countBadge = document.getElementById('vertical-count-badge');
+        if(countBadge) countBadge.textContent = currentVerticalUrls.length;
         grid.innerHTML = '';
         
         currentVerticalUrls.forEach((url, index) => {
@@ -2541,7 +2761,7 @@ function initVerticalBgLogic() {
 
     window.deleteVerticalGroup = function(id) {
         showConfirm('Apagar Grupo', 'Deseja apagar este grupo de fundos verticais?', async () => {
-            await deleteDoc(doc(db, 'vertical_bg_groups', id));
+            await deleteDoc(doc(window.getDb(), 'vertical_bg_groups', id));
             if (document.getElementById('vertical-group-id').value === id) window.clearVerticalEdit();
             showToast('Grupo apagado!');
         });
@@ -2557,25 +2777,27 @@ function initVerticalBgLogic() {
         document.getElementById('save-vertical-group-btn').querySelector('.button-text').textContent = "Salvar Grupo Vertical";
     }
 
-    document.getElementById('save-vertical-group-btn').onclick = async () => {
-        const title = document.getElementById('vertical-group-title').value.trim();
-        const id = document.getElementById('vertical-group-id').value;
-        const btn = document.getElementById('save-vertical-group-btn');
+    const saveVerticalBtn = document.getElementById('save-vertical-group-btn');
+    if(saveVerticalBtn) {
+        saveVerticalBtn.onclick = async () => {
+            const title = document.getElementById('vertical-group-title').value.trim();
+            const id = document.getElementById('vertical-group-id').value;
 
-        if(!title || currentVerticalUrls.length === 0) return showToast("Preencha o título e adicione imagens.", true);
-        
-        showButtonSpinner(btn);
-        try {
-            if (id) {
-                await updateDoc(doc(db, 'vertical_bg_groups', id), { title: title, backgrounds: currentVerticalUrls, updatedAt: serverTimestamp() });
-                showToast("Grupo Atualizado!");
-            } else {
-                await addDoc(collection(db, 'vertical_bg_groups'), { title: title, backgrounds: currentVerticalUrls, createdAt: serverTimestamp() });
-                showToast("Grupo Criado!");
-            }
-            window.clearVerticalEdit();
-        } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(btn, 'Salvar Grupo Vertical'); }
-    };
+            if(!title || currentVerticalUrls.length === 0) return showToast("Preencha o título e adicione imagens.", true);
+            
+            showButtonSpinner(saveVerticalBtn);
+            try {
+                if (id) {
+                    await updateDoc(doc(window.getDb(), 'vertical_bg_groups', id), { title: title, backgrounds: currentVerticalUrls, updatedAt: serverTimestamp() });
+                    showToast("Grupo Atualizado!");
+                } else {
+                    await addDoc(collection(window.getDb(), 'vertical_bg_groups'), { title: title, backgrounds: currentVerticalUrls, createdAt: serverTimestamp() });
+                    showToast("Grupo Criado!");
+                }
+                window.clearVerticalEdit();
+            } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(saveVerticalBtn, 'Salvar Grupo Vertical'); }
+        };
+    }
 }
 
 // ==========================================
@@ -2597,7 +2819,7 @@ function initUpdateLogic() {
 
     let updatesHistory = [];
 
-    onSnapshot(collection(db, 'app_updates'), (snapshot) => {
+    unsubUpdates = onSnapshot(collection(window.getDb(), 'app_updates'), (snapshot) => {
         updatesHistory = [];
         snapshot.forEach(doc => updatesHistory.push({ id: doc.id, ...doc.data() }));
         updatesHistory.sort((a, b) => compareVersions(b.version, a.version));
@@ -2606,9 +2828,10 @@ function initUpdateLogic() {
 
     function renderUpdateHistory(history) {
         const list = document.getElementById('update-history-list');
+        if(!list) return;
         list.innerHTML = '';
         if (history.length === 0) {
-            list.innerHTML = '<p class="text-sm text-slate-400">Nenhuma atualização lançada ainda.</p>';
+            list.innerHTML = '<p class="text-sm text-slate-400">Nenhuma atualização lançada ainda no BD ativo.</p>';
             return;
         }
         
@@ -2635,49 +2858,51 @@ function initUpdateLogic() {
 
     window.deleteUpdate = function(id) {
         showConfirm('Apagar Histórico', 'Deseja apagar este registro de atualização? (Se apagar a mais recente, os usuários pararão de receber o aviso).', async () => {
-            await deleteDoc(doc(db, 'app_updates', id));
+            await deleteDoc(doc(window.getDb(), 'app_updates', id));
             showToast('Atualização apagada do histórico.');
         });
     };
 
-    document.getElementById('save-update-btn').onclick = async () => {
-        const version = document.getElementById('update-version').value.trim();
-        const link = document.getElementById('update-link').value.trim();
-        const notes = document.getElementById('update-notes').value.trim();
-        const btn = document.getElementById('save-update-btn');
+    const saveUpdateBtn = document.getElementById('save-update-btn');
+    if(saveUpdateBtn) {
+        saveUpdateBtn.onclick = async () => {
+            const version = document.getElementById('update-version').value.trim();
+            const link = document.getElementById('update-link').value.trim();
+            const notes = document.getElementById('update-notes').value.trim();
 
-        if (!version || !link || !notes) {
-            return showToast("Preencha todos os campos da atualização.", true);
-        }
-        
-        if (updatesHistory.length > 0 && compareVersions(version, updatesHistory[0].version) <= 0) {
-            return showToast(`A versão deve ser maior que ${updatesHistory[0].version}!`, true);
-        }
+            if (!version || !link || !notes) {
+                return showToast("Preencha todos os campos da atualização.", true);
+            }
+            
+            if (updatesHistory.length > 0 && compareVersions(version, updatesHistory[0].version) <= 0) {
+                return showToast(`A versão deve ser maior que ${updatesHistory[0].version}!`, true);
+            }
 
-        showButtonSpinner(btn);
-        try {
-            await addDoc(collection(db, 'app_updates'), { 
-                version: version, 
-                link: link, 
-                notes: notes,
-                createdAt: serverTimestamp()
-            });
-            
-            await window.sendPushNotification("all", "Temos uma Nova Atualização! 🚀", `A versão ${version} já está disponível para baixar no aplicativo.`);
+            showButtonSpinner(saveUpdateBtn);
+            try {
+                await addDoc(collection(window.getDb(), 'app_updates'), { 
+                    version: version, 
+                    link: link, 
+                    notes: notes,
+                    createdAt: serverTimestamp()
+                });
+                
+                await window.sendPushNotification("all", "Temos uma Nova Atualização! 🚀", `A versão ${version} já está disponível para baixar no aplicativo.`);
 
-            showToast(`Versão ${version} publicada! Os apps vão detectar isso em breve.`);
-            
-            document.getElementById('update-version').value = '';
-            document.getElementById('update-link').value = '';
-            document.getElementById('update-notes').value = '';
-            
-        } catch(e) { 
-            console.error(e);
-            showToast("Erro ao publicar atualização.", true); 
-        } finally { 
-            hideButtonSpinner(btn, 'Lançar Versão para Usuários'); 
-        }
-    };
+                showToast(`Versão ${version} publicada! Os apps vão detectar isso em breve.`);
+                
+                document.getElementById('update-version').value = '';
+                document.getElementById('update-link').value = '';
+                document.getElementById('update-notes').value = '';
+                
+            } catch(e) { 
+                console.error(e);
+                showToast("Erro ao publicar atualização.", true); 
+            } finally { 
+                hideButtonSpinner(saveUpdateBtn, 'Lançar Versão para Usuários'); 
+            }
+        };
+    }
 }
 
 
@@ -2689,109 +2914,118 @@ window.startUpdateScan = async function() {
     const resultsDiv = document.getElementById('radar-results-list');
     const progressText = document.getElementById('radar-progress');
 
-    const tvShows = catalogData.filter(c => c.type === 'tv');
-    
-    if (tvShows.length === 0) {
-        return showToast("Você não possui séries cadastradas no catálogo.", true);
-    }
-
     showButtonSpinner(btn);
     resultsDiv.innerHTML = '';
     progressText.classList.remove('hidden');
-    let foundUpdates = 0;
 
-    progressText.textContent = `Analisando 0 de ${tvShows.length} séries...`;
+    try {
+        // Busca todos para não ser limitado pela paginação
+        const snap = await getDocs(query(collection(window.getDb(), 'content')));
+        const allItems = [];
+        snap.forEach(d => allItems.push({ id: d.id, ...d.data() }));
 
-    for (let i = 0; i < tvShows.length; i++) {
-        const show = tvShows[i];
-        progressText.textContent = `Buscando dados: ${i + 1}/${tvShows.length} (${show.title})...`;
+        const tvShows = allItems.filter(c => c.type === 'tv');
+        
+        if (tvShows.length === 0) {
+            hideButtonSpinner(btn, '📡 Escanear Novamente');
+            return showToast("Você não possui séries cadastradas no catálogo.", true);
+        }
 
-        try {
-            const tmdbData = await fetchTMDB(`tv/${show.tmdb_id}`);
-            if (!tmdbData) continue;
+        let foundUpdates = 0;
+        progressText.textContent = `Analisando 0 de ${tvShows.length} séries...`;
 
-            let localEpCount = 0;
-            if (show.seasons) {
-                Object.entries(show.seasons).forEach(([key, s]) => {
-                    const sNum = parseInt(s.tmdbSeason !== undefined ? s.tmdbSeason : key);
-                    if (sNum > 0 && s.episodes) {
-                        const validEps = s.episodes.filter(ep => 
-                            (ep.url && ep.url.trim() !== '') || 
-                            (ep.altUrl && ep.altUrl.trim() !== '') || 
-                            ep.isComingSoon
-                        );
-                        localEpCount += validEps.length;
-                    }
-                });
-            }
+        for (let i = 0; i < tvShows.length; i++) {
+            const show = tvShows[i];
+            progressText.textContent = `Buscando dados: ${i + 1}/${tvShows.length} (${show.title})...`;
 
-            let validTmdbEpCount = 0;
-            if (tmdbData.seasons) {
-                // Ao invés de usar o count superficial que pode incluir vazios futuros
-                // Buscamos e filtramos usando a mesma regra de adição oficial
-                for (let s of tmdbData.seasons) {
-                    if (s.season_number > 0) {
-                        const seasonData = await fetchTMDB(`tv/${show.tmdb_id}/season/${s.season_number}`);
-                        if (seasonData && seasonData.episodes) {
-                            const today = new Date();
-                            const validEps = seasonData.episodes.filter(ep => {
-                                const airDate = ep.air_date ? new Date(ep.air_date) : null;
-                                const hasAired = airDate && airDate <= today;
-                                const isGenericName = ep.name && (ep.name.toLowerCase().startsWith('episode') || ep.name.toLowerCase().startsWith('episódio') || ep.name.toLowerCase().startsWith('ep '));
-                                const hasInfo = ep.still_path || (ep.overview && ep.overview.trim() !== '') || !isGenericName;
-                                return hasAired || hasInfo;
-                            });
-                            validTmdbEpCount += validEps.length;
-                        } else {
-                            validTmdbEpCount += (s.episode_count || 0); // fallback
+            try {
+                const tmdbData = await fetchTMDB(`tv/${show.tmdb_id}`);
+                if (!tmdbData) continue;
+
+                let localEpCount = 0;
+                if (show.seasons) {
+                    Object.entries(show.seasons).forEach(([key, s]) => {
+                        const sNum = parseInt(s.tmdbSeason !== undefined ? s.tmdbSeason : key);
+                        if (sNum > 0 && s.episodes) {
+                            const validEps = s.episodes.filter(ep => 
+                                (ep.url && ep.url.trim() !== '') || 
+                                (ep.altUrl && ep.altUrl.trim() !== '') || 
+                                ep.isComingSoon
+                            );
+                            localEpCount += validEps.length;
+                        }
+                    });
+                }
+
+                let validTmdbEpCount = 0;
+                if (tmdbData.seasons) {
+                    for (let s of tmdbData.seasons) {
+                        if (s.season_number > 0) {
+                            const seasonData = await fetchTMDB(`tv/${show.tmdb_id}/season/${s.season_number}`);
+                            if (seasonData && seasonData.episodes) {
+                                const today = new Date();
+                                const validEps = seasonData.episodes.filter(ep => {
+                                    const airDate = ep.air_date ? new Date(ep.air_date) : null;
+                                    const hasAired = airDate && airDate <= today;
+                                    const isGenericName = ep.name && (ep.name.toLowerCase().startsWith('episode') || ep.name.toLowerCase().startsWith('episódio') || ep.name.toLowerCase().startsWith('ep '));
+                                    const hasInfo = ep.still_path || (ep.overview && ep.overview.trim() !== '') || !isGenericName;
+                                    return hasAired || hasInfo;
+                                });
+                                validTmdbEpCount += validEps.length;
+                            } else {
+                                validTmdbEpCount += (s.episode_count || 0);
+                            }
                         }
                     }
+                } else {
+                    validTmdbEpCount = tmdbData.number_of_episodes || 0;
                 }
-            } else {
-                validTmdbEpCount = tmdbData.number_of_episodes || 0;
-            }
 
-            if (validTmdbEpCount > localEpCount) {
-                foundUpdates++;
-                const diff = validTmdbEpCount - localEpCount;
-                
-                const div = document.createElement('div');
-                div.className = 'flex items-start gap-4 p-4 bg-black/50 rounded-xl border border-emerald-500/30 hover:border-emerald-500 transition-colors group relative overflow-hidden';
-                div.innerHTML = `
-                    <div class="absolute top-0 right-0 bg-emerald-600 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg z-10">
-                        +${diff} Novo(s)
-                    </div>
-                    <img src="${show.poster || 'https://placehold.co/120x160/1c1917/999999?text=IMG'}" class="w-16 h-24 object-cover rounded-lg shadow-md group-hover:scale-105 transition-transform duration-300">
-                    <div class="flex-1 min-w-0 flex flex-col h-full justify-between">
-                        <div>
-                            <h4 class="font-bold text-white truncate text-base mb-1" title="${escapeHTML(show.title)}">${escapeHTML(show.title)}</h4>
-                            <p class="text-xs text-slate-400 mb-2">Temos: ${localEpCount} | TMDB: <span class="text-emerald-400 font-bold">${validTmdbEpCount}</span></p>
+                if (validTmdbEpCount > localEpCount) {
+                    foundUpdates++;
+                    const diff = validTmdbEpCount - localEpCount;
+                    
+                    const div = document.createElement('div');
+                    div.className = 'flex items-start gap-4 p-4 bg-black/50 rounded-xl border border-emerald-500/30 hover:border-emerald-500 transition-colors group relative overflow-hidden';
+                    div.innerHTML = `
+                        <div class="absolute top-0 right-0 bg-emerald-600 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg z-10">
+                            +${diff} Novo(s)
                         </div>
-                        <button onclick="handleQuickUpdate('${show.id}')" class="glass-button w-full rounded-lg py-1.5 text-xs" style="--bg-color: rgba(16, 185, 129, 0.7);">
-                            <div class="glass-content text-white font-bold">⚙️ Adicionar Agora</div>
-                        </button>
-                    </div>
-                `;
-                resultsDiv.appendChild(div);
+                        <img src="${show.poster || 'https://placehold.co/120x160/1c1917/999999?text=IMG'}" class="w-16 h-24 object-cover rounded-lg shadow-md group-hover:scale-105 transition-transform duration-300">
+                        <div class="flex-1 min-w-0 flex flex-col h-full justify-between">
+                            <div>
+                                <h4 class="font-bold text-white truncate text-base mb-1" title="${escapeHTML(show.title)}">${escapeHTML(show.title)}</h4>
+                                <p class="text-xs text-slate-400 mb-2">Temos: ${localEpCount} | TMDB: <span class="text-emerald-400 font-bold">${validTmdbEpCount}</span></p>
+                            </div>
+                            <button onclick="handleQuickUpdate('${show.id}')" class="glass-button w-full rounded-lg py-1.5 text-xs" style="--bg-color: rgba(16, 185, 129, 0.7);">
+                                <div class="glass-content text-white font-bold">⚙️ Adicionar Agora</div>
+                            </button>
+                        </div>
+                    `;
+                    resultsDiv.appendChild(div);
+                }
+            } catch (e) {
+                console.error("Erro ao escanear a série", show.title, e);
             }
-        } catch (e) {
-            console.error("Erro ao escanear a série", show.title, e);
         }
-    }
 
-    if (foundUpdates === 0) {
-        resultsDiv.innerHTML = `
-            <div class="col-span-full flex flex-col items-center justify-center h-48 text-emerald-500">
-                <svg class="w-16 h-16 mb-3 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                <p class="font-bold text-lg text-white">Tudo Atualizado!</p>
-                <p class="text-sm">Nenhuma série possui episódios novos no TMDB.</p>
-            </div>
-        `;
+        if (foundUpdates === 0) {
+            resultsDiv.innerHTML = `
+                <div class="col-span-full flex flex-col items-center justify-center h-48 text-emerald-500">
+                    <svg class="w-16 h-16 mb-3 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    <p class="font-bold text-lg text-white">Tudo Atualizado!</p>
+                    <p class="text-sm">Nenhuma série possui episódios novos no TMDB.</p>
+                </div>
+            `;
+        }
+        progressText.textContent = `Escaneamento concluído! Encontrado(s) ${foundUpdates} série(s) desatualizada(s).`;
+    } catch(err) {
+        console.error("Erro no Radar", err);
+        progressText.textContent = `Erro ao fazer varredura.`;
+    } finally {
+        hideButtonSpinner(btn, '📡 Escanear Novamente');
+        window.initializeGlassEffects();
     }
-
-    progressText.textContent = `Escaneamento concluído! Encontrado(s) ${foundUpdates} série(s) desatualizada(s).`;
-    hideButtonSpinner(btn, '📡 Escanear Novamente');
-    window.initializeGlassEffects();
 };
 
 window.handleQuickUpdate = async function(docId) {
@@ -2805,7 +3039,7 @@ window.handleQuickUpdate = async function(docId) {
             
             setTimeout(() => {
                 const editForm = document.getElementById('edit-form');
-                editForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                if(editForm) editForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 500);
         }
     }, 1000);
@@ -2816,51 +3050,62 @@ window.startBulkAgeRatingUpdate = async function() {
     const resultsDiv = document.getElementById('bulk-results-list');
     const progressText = document.getElementById('bulk-progress-text');
 
-    const missingItems = catalogData.filter(c => !c.ageRating || c.ageRating.trim() === '');
-    
-    if (missingItems.length === 0) {
-        return showToast("Parabéns! Todos os seus animes já possuem Classificação Indicativa.", false);
-    }
+    showButtonSpinner(btn);
 
-    showConfirm('Atualização em Massa', `Encontramos ${missingItems.length} animes sem classificação. Deseja buscar automaticamente no TMDB? O processo pode demorar alguns segundos.`, async () => {
-        showButtonSpinner(btn);
-        resultsDiv.innerHTML = '';
-        progressText.classList.remove('hidden');
-        let successCount = 0;
+    try {
+        const snap = await getDocs(query(collection(window.getDb(), 'content')));
+        const allItems = [];
+        snap.forEach(d => allItems.push({ id: d.id, ...d.data() }));
 
-        progressText.textContent = `Processando 0 de ${missingItems.length} animes...`;
-
-        for (let i = 0; i < missingItems.length; i++) {
-            const item = missingItems[i];
-            progressText.textContent = `Buscando idade: ${i + 1}/${missingItems.length} (${item.title})...`;
-
-            try {
-                const rating = await fetchTmdbAgeRating(item.tmdb_id, item.type);
-                
-                await updateDoc(doc(db, 'content', item.id), { ageRating: rating });
-                successCount++;
-
-                const div = document.createElement('div');
-                div.className = 'flex items-center gap-3 p-3 bg-black/50 rounded-xl border border-yellow-500/30';
-                div.innerHTML = `
-                    <img src="${item.poster}" class="w-10 h-14 object-cover rounded shadow-md">
-                    <div class="flex-1 min-w-0">
-                        <h4 class="font-bold text-white text-sm truncate">${escapeHTML(item.title)}</h4>
-                        <p class="text-xs text-slate-400">Classificação definida: <span class="text-yellow-400 font-bold">${rating === 'L' ? 'Livre' : rating + ' Anos'}</span></p>
-                    </div>
-                    <div class="bg-yellow-500/20 p-2 rounded-full"><svg class="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>
-                `;
-                resultsDiv.prepend(div); 
-            } catch (e) {
-                console.error("Erro ao atualizar o item", item.title, e);
-            }
+        const missingItems = allItems.filter(c => !c.ageRating || c.ageRating.trim() === '');
+        
+        if (missingItems.length === 0) {
+            hideButtonSpinner(btn, '⚡ Iniciar Novamente');
+            return showToast("Parabéns! Todos os seus animes já possuem Classificação Indicativa no banco atual.", false);
         }
 
-        progressText.textContent = `Varredura concluída! ${successCount} animes atualizados com sucesso.`;
+        showConfirm('Atualização em Massa', `Encontramos ${missingItems.length} animes sem classificação. Deseja buscar automaticamente no TMDB? O processo pode demorar alguns segundos.`, async () => {
+            resultsDiv.innerHTML = '';
+            progressText.classList.remove('hidden');
+            let successCount = 0;
+
+            progressText.textContent = `Processando 0 de ${missingItems.length} animes...`;
+
+            for (let i = 0; i < missingItems.length; i++) {
+                const item = missingItems[i];
+                progressText.textContent = `Buscando idade: ${i + 1}/${missingItems.length} (${item.title})...`;
+
+                try {
+                    const rating = await fetchTmdbAgeRating(item.tmdb_id, item.type);
+                    
+                    await updateDoc(doc(window.getDb(), 'content', item.id), { ageRating: rating });
+                    successCount++;
+
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center gap-3 p-3 bg-black/50 rounded-xl border border-yellow-500/30';
+                    div.innerHTML = `
+                        <img src="${item.poster}" class="w-10 h-14 object-cover rounded shadow-md">
+                        <div class="flex-1 min-w-0">
+                            <h4 class="font-bold text-white text-sm truncate">${escapeHTML(item.title)}</h4>
+                            <p class="text-xs text-slate-400">Classificação definida: <span class="text-yellow-400 font-bold">${rating === 'L' ? 'Livre' : rating + ' Anos'}</span></p>
+                        </div>
+                        <div class="bg-yellow-500/20 p-2 rounded-full"><svg class="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>
+                    `;
+                    resultsDiv.prepend(div); 
+                } catch (e) {
+                    console.error("Erro ao atualizar o item", item.title, e);
+                }
+            }
+
+            progressText.textContent = `Varredura concluída! ${successCount} animes atualizados com sucesso.`;
+            hideButtonSpinner(btn, '⚡ Iniciar Novamente');
+            window.initializeGlassEffects();
+            showToast(`Processo finalizado! ${successCount} itens atualizados.`);
+        });
+    } catch(err) {
         hideButtonSpinner(btn, '⚡ Iniciar Novamente');
-        window.initializeGlassEffects();
-        showToast(`Processo finalizado! ${successCount} itens atualizados.`);
-    });
+        showToast("Erro ao buscar dados", true);
+    }
 };
 
 window.startBulkLogoUpdate = async function() {
@@ -2868,80 +3113,91 @@ window.startBulkLogoUpdate = async function() {
     const resultsDiv = document.getElementById('bulk-logos-results-list');
     const progressText = document.getElementById('bulk-logos-progress-text');
 
-    // Filtra itens que NÃO possuem a chave logo ou que a URL está vazia
-    const missingItems = catalogData.filter(c => !c.logo || c.logo.trim() === '');
-    
-    if (missingItems.length === 0) {
-        return showToast("Parabéns! Todos os animes e filmes já possuem Logo (Clearlogo).", false);
-    }
+    showButtonSpinner(btn);
 
-    showConfirm('Atualização em Massa', `Encontramos ${missingItems.length} obras sem logo. Deseja buscar e sincronizar automaticamente no TMDB? O processo pode demorar um pouco.`, async () => {
-        showButtonSpinner(btn);
-        resultsDiv.innerHTML = '';
-        progressText.classList.remove('hidden');
-        let successCount = 0;
+    try {
+        const snap = await getDocs(query(collection(window.getDb(), 'content')));
+        const allItems = [];
+        snap.forEach(d => allItems.push({ id: d.id, ...d.data() }));
 
-        progressText.textContent = `Processando 0 de ${missingItems.length} animes...`;
-
-        for (let i = 0; i < missingItems.length; i++) {
-            const item = missingItems[i];
-            progressText.textContent = `Buscando logo: ${i + 1}/${missingItems.length} (${item.title})...`;
-
-            try {
-                // Fetch focado em pegar imagens em pt-BR e inglês
-                const imgData = await fetchTMDB(`${item.type}/${item.tmdb_id}/images`, 'include_image_language=pt-BR,pt,en,null');
-                
-                if (imgData && imgData.logos && imgData.logos.length > 0) {
-                    const logoUrl = `https://image.tmdb.org/t/p/original${imgData.logos[0].file_path}`;
-                    
-                    // Atualiza no Firebase
-                    await updateDoc(doc(db, 'content', item.id), { logo: logoUrl });
-                    successCount++;
-
-                    // Renderiza o visual do sucesso (Glassmorphism + Cores Pink)
-                    const div = document.createElement('div');
-                    div.className = 'flex items-center gap-3 p-3 bg-black/50 rounded-xl border border-pink-500/30';
-                    div.innerHTML = `
-                        <div class="w-16 h-12 flex items-center justify-center bg-slate-800 rounded p-1">
-                            <img src="${logoUrl}" class="max-w-full max-h-full object-contain">
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <h4 class="font-bold text-white text-sm truncate">${escapeHTML(item.title)}</h4>
-                            <p class="text-xs text-slate-400">Logo: <span class="text-pink-400 font-bold">Adicionado</span></p>
-                        </div>
-                        <div class="bg-pink-500/20 p-2 rounded-full"><svg class="w-4 h-4 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>
-                    `;
-                    resultsDiv.prepend(div); 
-                }
-            } catch (e) {
-                console.error("Erro ao atualizar o logo do item", item.title, e);
-            }
+        const missingItems = allItems.filter(c => !c.logo || c.logo.trim() === '');
+        
+        if (missingItems.length === 0) {
+            hideButtonSpinner(btn, '✨ Buscar Logos Novamente');
+            return showToast("Parabéns! Todos os animes e filmes já possuem Logo (Clearlogo) no BD ativo.", false);
         }
 
-        progressText.textContent = `Varredura concluída! ${successCount} logos atualizados com sucesso.`;
+        showConfirm('Atualização em Massa', `Encontramos ${missingItems.length} obras sem logo no Banco de Dados. Deseja buscar e sincronizar automaticamente no TMDB? O processo pode demorar um pouco.`, async () => {
+            resultsDiv.innerHTML = '';
+            progressText.classList.remove('hidden');
+            let successCount = 0;
+
+            progressText.textContent = `Processando 0 de ${missingItems.length} animes...`;
+
+            for (let i = 0; i < missingItems.length; i++) {
+                const item = missingItems[i];
+                progressText.textContent = `Buscando logo: ${i + 1}/${missingItems.length} (${item.title})...`;
+
+                try {
+                    const imgData = await fetchTMDB(`${item.type}/${item.tmdb_id}/images`, 'include_image_language=pt-BR,pt,en,null');
+                    
+                    if (imgData && imgData.logos && imgData.logos.length > 0) {
+                        const logoUrl = `https://image.tmdb.org/t/p/original${imgData.logos[0].file_path}`;
+                        
+                        await updateDoc(doc(window.getDb(), 'content', item.id), { logo: logoUrl });
+                        successCount++;
+
+                        const div = document.createElement('div');
+                        div.className = 'flex items-center gap-3 p-3 bg-black/50 rounded-xl border border-pink-500/30';
+                        div.innerHTML = `
+                            <div class="w-16 h-12 flex items-center justify-center bg-slate-800 rounded p-1">
+                                <img src="${logoUrl}" class="max-w-full max-h-full object-contain">
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <h4 class="font-bold text-white text-sm truncate">${escapeHTML(item.title)}</h4>
+                                <p class="text-xs text-slate-400">Logo: <span class="text-pink-400 font-bold">Adicionado</span></p>
+                            </div>
+                            <div class="bg-pink-500/20 p-2 rounded-full"><svg class="w-4 h-4 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>
+                        `;
+                        resultsDiv.prepend(div); 
+                    }
+                } catch (e) {
+                    console.error("Erro ao atualizar o logo do item", item.title, e);
+                }
+            }
+
+            progressText.textContent = `Varredura concluída! ${successCount} logos atualizados com sucesso.`;
+            hideButtonSpinner(btn, '✨ Buscar Logos Novamente');
+            window.initializeGlassEffects();
+            showToast(`Processo finalizado! ${successCount} novos logos sincronizados.`);
+        });
+    } catch(err) {
         hideButtonSpinner(btn, '✨ Buscar Logos Novamente');
-        window.initializeGlassEffects();
-        showToast(`Processo finalizado! ${successCount} novos logos sincronizados.`);
-    });
+        showToast("Erro ao buscar dados", true);
+    }
 };
 
 // ==========================================
 // LÓGICA DE CONQUISTAS E INICIALIZAÇÃO GERAL
 // ==========================================
 function initAchievementsLogic() {
-    onSnapshot(collection(db, 'achievements'), (snapshot) => {
+    unsubAchievements = onSnapshot(collection(window.getDb(), 'achievements'), (snapshot) => {
         achievementsData = [];
         snapshot.forEach(doc => achievementsData.push({ id: doc.id, ...doc.data() }));
         renderAchievements();
     });
 
-    document.getElementById('achievement-icon').addEventListener('input', function() {
-        const preview = document.getElementById('achievement-icon-preview');
-        preview.src = this.value.trim() || 'https://placehold.co/100x100/1c1917/999999?text=IMG';
-    });
+    const achIconInp = document.getElementById('achievement-icon');
+    if(achIconInp) {
+        achIconInp.addEventListener('input', function() {
+            const preview = document.getElementById('achievement-icon-preview');
+            preview.src = this.value.trim() || 'https://placehold.co/100x100/1c1917/999999?text=IMG';
+        });
+    }
 
     function renderAchievements() {
         const list = document.getElementById('achievements-list');
+        if(!list) return;
         list.innerHTML = '';
         if (achievementsData.length === 0) {
             list.innerHTML = '<p class="text-sm text-slate-400 col-span-full">Nenhuma conquista cadastrada.</p>';
@@ -2996,8 +3252,8 @@ function initAchievementsLogic() {
     };
 
     window.deleteAchievement = function(id) {
-        showConfirm('Apagar Conquista', 'Deseja excluir esta conquista? (Os usuários que já têm não a perderão, mas novos não poderão ganhar).', async () => {
-            await deleteDoc(doc(db, 'achievements', id));
+        showConfirm('Apagar Conquista', 'Deseja excluir esta conquista?', async () => {
+            await deleteDoc(doc(window.getDb(), 'achievements', id));
             if(document.getElementById('achievement-id').value === id) window.clearAchievementEdit();
             showToast('Conquista apagada!');
         });
@@ -3015,137 +3271,140 @@ function initAchievementsLogic() {
         document.getElementById('save-achievement-btn').querySelector('.button-text').textContent = "Salvar Conquista";
     };
 
-    document.getElementById('save-achievement-btn').onclick = async () => {
-        const id = document.getElementById('achievement-id').value;
-        const title = document.getElementById('achievement-title').value.trim();
-        const desc = document.getElementById('achievement-desc').value.trim();
-        const icon = document.getElementById('achievement-icon').value.trim();
-        const type = document.getElementById('achievement-type').value;
-        const diff = parseInt(document.getElementById('achievement-difficulty').value) || 1;
-        const target = parseInt(document.getElementById('achievement-target').value) || 0;
-        const btn = document.getElementById('save-achievement-btn');
+    const saveAchBtn = document.getElementById('save-achievement-btn');
+    if(saveAchBtn) {
+        saveAchBtn.onclick = async () => {
+            const id = document.getElementById('achievement-id').value;
+            const title = document.getElementById('achievement-title').value.trim();
+            const desc = document.getElementById('achievement-desc').value.trim();
+            const icon = document.getElementById('achievement-icon').value.trim();
+            const type = document.getElementById('achievement-type').value;
+            const diff = parseInt(document.getElementById('achievement-difficulty').value) || 1;
+            const target = parseInt(document.getElementById('achievement-target').value) || 0;
 
-        if(!title || !desc || !icon || target <= 0) {
-            return showToast("Preencha todos os campos e coloque um alvo maior que zero.", true);
-        }
-
-        showButtonSpinner(btn);
-        try {
-            const data = {
-                title: title,
-                description: desc,
-                iconUrl: icon,
-                conditionType: type,
-                conditionValue: target,
-                difficultyLevel: diff,
-                updatedAt: serverTimestamp()
-            };
-
-            if (id) {
-                await updateDoc(doc(db, 'achievements', id), data);
-                showToast("Conquista Atualizada!");
-            } else {
-                data.createdAt = serverTimestamp();
-                await addDoc(collection(db, 'achievements'), data);
-                showToast("Conquista Criada!");
+            if(!title || !desc || !icon || target <= 0) {
+                return showToast("Preencha todos os campos e coloque um alvo maior que zero.", true);
             }
-            window.clearAchievementEdit();
-        } catch(e) { 
-            console.error(e);
-            showToast("Erro ao salvar conquista.", true); 
-        } finally { 
-            hideButtonSpinner(btn, id ? 'Atualizar Conquista' : 'Salvar Conquista'); 
-        }
-    };
 
-    document.getElementById('generate-achievements-ai-btn').onclick = async () => {
-        let key = localStorage.getItem('mango_gemini_key');
-        if(!key) {
-            key = prompt("Cole sua API Key do Google AI Studio (Gemini):");
-            if(!key) return;
-            localStorage.setItem('mango_gemini_key', key);
-        }
-
-        const theme = document.getElementById('ai-achievement-theme').value.trim();
-        const btn = document.getElementById('generate-achievements-ai-btn');
-        showButtonSpinner(btn);
-
-        const sysPrompt = `
-        Você é um Game Designer criando um sistema de conquistas para um app de streaming de animes.
-        Sua tarefa é gerar EXATAMENTE 5 conquistas, sendo estritamente uma para cada nível de dificuldade:
-        Nível 1: Muito Fácil (Para iniciantes)
-        Nível 2: Fácil (Para usuários regulares)
-        Nível 3: Normal (Requer dedicação)
-        Nível 4: Difícil (Para usuários hardcore)
-        Nível 5: Quase Impossível (Apenas para as lendas do app)
-
-        ${theme ? `Foque as ideias neste tema: ${theme}` : 'Misture os temas: assistir episódios, escrever comentários e dias de conta.'}
-
-        As condições válidas ('conditionType') são EXATAMENTE: 'WATCH_EPISODES', 'WRITE_COMMENTS', 'ACCOUNT_AGE_DAYS'.
-        O 'conditionValue' deve ser um número inteiro compatível com o nível. Ex: Nível 5 de episódios pode ser 5000.
-        
-        Responda EXCLUSIVAMENTE com um JSON Array, sem marcações markdown, sem nada antes ou depois.
-        Exemplo de Formato Esperado:
-        [
-          {
-            "title": "Nome Criativo",
-            "description": "Descrição envolvente e divertida",
-            "conditionType": "WATCH_EPISODES",
-            "conditionValue": 100,
-            "difficultyLevel": 1
-          }
-        ]
-        `;
-
-        try {
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: sysPrompt }] }] })
-            });
-            if(!res.ok) throw new Error("Erro na requisição ao Gemini");
-            
-            const data = await res.json();
-            let aiText = data.candidates[0].content.parts[0].text;
-            aiText = aiText.substring(aiText.indexOf('['), aiText.lastIndexOf(']') + 1);
-            const newAchievements = JSON.parse(aiText);
-            
-            if (!Array.isArray(newAchievements) || newAchievements.length === 0) throw new Error("Resposta inválida da IA.");
-
-            const savePromises = newAchievements.map(ach => {
-                let color = "10B981"; // Verde (Lvl 1)
-                if(ach.difficultyLevel == 2) color = "3B82F6"; // Azul
-                if(ach.difficultyLevel == 3) color = "EAB308"; // Amarelo
-                if(ach.difficultyLevel == 4) color = "F97316"; // Laranja
-                if(ach.difficultyLevel == 5) color = "EF4444"; // Vermelho
-
-                const iconUrl = `https://placehold.co/200x200/${color}/ffffff?text=Lvl+${ach.difficultyLevel}&font=montserrat`;
-                
-                return addDoc(collection(db, 'achievements'), {
-                    title: ach.title,
-                    description: ach.description,
-                    iconUrl: iconUrl,
-                    conditionType: ach.conditionType,
-                    conditionValue: ach.conditionValue,
-                    difficultyLevel: ach.difficultyLevel,
-                    createdAt: serverTimestamp(),
+            showButtonSpinner(saveAchBtn);
+            try {
+                const data = {
+                    title: title,
+                    description: desc,
+                    iconUrl: icon,
+                    conditionType: type,
+                    conditionValue: target,
+                    difficultyLevel: diff,
                     updatedAt: serverTimestamp()
-                });
-            });
-            await Promise.all(savePromises);
+                };
 
-            showToast(`${newAchievements.length} conquistas geradas com sucesso pela IA!`);
-            document.getElementById('ai-achievement-theme').value = '';
-        } catch(e) { 
-            console.error(e);
-            showToast("Erro ao gerar com IA. Verifique sua Chave API.", true); 
-        } finally { 
-            hideButtonSpinner(btn, 'Gerar Pack de Conquistas'); 
-        }
-    };
+                if (id) {
+                    await updateDoc(doc(window.getDb(), 'achievements', id), data);
+                    showToast("Conquista Atualizada!");
+                } else {
+                    data.createdAt = serverTimestamp();
+                    await addDoc(collection(window.getDb(), 'achievements'), data);
+                    showToast("Conquista Criada!");
+                }
+                window.clearAchievementEdit();
+            } catch(e) { 
+                console.error(e);
+                showToast("Erro ao salvar conquista.", true); 
+            } finally { 
+                hideButtonSpinner(saveAchBtn, id ? 'Atualizar Conquista' : 'Salvar Conquista'); 
+            }
+        };
+    }
+
+    const genAiBtn = document.getElementById('generate-achievements-ai-btn');
+    if(genAiBtn) {
+        genAiBtn.onclick = async () => {
+            let key = localStorage.getItem('mango_gemini_key');
+            if(!key) {
+                key = prompt("Cole sua API Key do Google AI Studio (Gemini):");
+                if(!key) return;
+                localStorage.setItem('mango_gemini_key', key);
+            }
+
+            const theme = document.getElementById('ai-achievement-theme').value.trim();
+            showButtonSpinner(genAiBtn);
+
+            const sysPrompt = `
+            Você é um Game Designer criando um sistema de conquistas para um app de streaming de animes.
+            Sua tarefa é gerar EXATAMENTE 5 conquistas, sendo estritamente uma para cada nível de dificuldade:
+            Nível 1: Muito Fácil (Para iniciantes)
+            Nível 2: Fácil (Para usuários regulares)
+            Nível 3: Normal (Requer dedicação)
+            Nível 4: Difícil (Para usuários hardcore)
+            Nível 5: Quase Impossível (Apenas para as lendas do app)
+
+            ${theme ? `Foque as ideias neste tema: ${theme}` : 'Misture os temas: assistir episódios, escrever comentários e dias de conta.'}
+
+            As condições válidas ('conditionType') são EXATAMENTE: 'WATCH_EPISODES', 'WRITE_COMMENTS', 'ACCOUNT_AGE_DAYS'.
+            O 'conditionValue' deve ser um número inteiro compatível com o nível. Ex: Nível 5 de episódios pode ser 5000.
+            
+            Responda EXCLUSIVAMENTE com um JSON Array, sem marcações markdown, sem nada antes ou depois.
+            Exemplo de Formato Esperado:
+            [
+              {
+                "title": "Nome Criativo",
+                "description": "Descrição envolvente e divertida",
+                "conditionType": "WATCH_EPISODES",
+                "conditionValue": 100,
+                "difficultyLevel": 1
+              }
+            ]
+            `;
+
+            try {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: sysPrompt }] }] })
+                });
+                if(!res.ok) throw new Error("Erro na requisição ao Gemini");
+                
+                const data = await res.json();
+                let aiText = data.candidates[0].content.parts[0].text;
+                aiText = aiText.substring(aiText.indexOf('['), aiText.lastIndexOf(']') + 1);
+                const newAchievements = JSON.parse(aiText);
+                
+                if (!Array.isArray(newAchievements) || newAchievements.length === 0) throw new Error("Resposta inválida da IA.");
+
+                const savePromises = newAchievements.map(ach => {
+                    let color = "10B981"; // Verde (Lvl 1)
+                    if(ach.difficultyLevel == 2) color = "3B82F6"; // Azul
+                    if(ach.difficultyLevel == 3) color = "EAB308"; // Amarelo
+                    if(ach.difficultyLevel == 4) color = "F97316"; // Laranja
+                    if(ach.difficultyLevel == 5) color = "EF4444"; // Vermelho
+
+                    const iconUrl = `https://placehold.co/200x200/${color}/ffffff?text=Lvl+${ach.difficultyLevel}&font=montserrat`;
+                    
+                    return addDoc(collection(window.getDb(), 'achievements'), {
+                        title: ach.title,
+                        description: ach.description,
+                        iconUrl: iconUrl,
+                        conditionType: ach.conditionType,
+                        conditionValue: ach.conditionValue,
+                        difficultyLevel: ach.difficultyLevel,
+                        createdAt: serverTimestamp(),
+                        updatedAt: serverTimestamp()
+                    });
+                });
+                await Promise.all(savePromises);
+
+                showToast(`${newAchievements.length} conquistas geradas com sucesso pela IA!`);
+                document.getElementById('ai-achievement-theme').value = '';
+            } catch(e) { 
+                console.error(e);
+                showToast("Erro ao gerar com IA. Verifique sua Chave API.", true); 
+            } finally { 
+                hideButtonSpinner(genAiBtn, 'Gerar Pack de Conquistas'); 
+            }
+        };
+    }
 }
 
 // Inicialização principal da aplicação
 document.addEventListener('DOMContentLoaded', () => {
-    // FUNÇÃO PRINCIPAL DE ROTEAMENTO (Navegação via Link/Hash)
     function navigateTo(pageId) {
         document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
         document.querySelectorAll('.content-page').forEach(p => p.classList.remove('active'));
@@ -3160,13 +3419,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (page) {
             page.classList.add('active');
         } else {
-            // Fallback caso a rota não exista
             document.querySelector('.nav-link[data-page="addContent"]')?.classList.add('active');
             document.getElementById('addContent')?.classList.add('active');
         }
     }
 
-    // Ouvinte que dispara sempre que a rota/hash (#) na URL muda (como ao clicar no botão "Voltar" do navegador)
     window.addEventListener('hashchange', () => {
         const pageId = window.location.hash.substring(1) || 'addContent';
         navigateTo(pageId);
@@ -3179,39 +3436,38 @@ document.addEventListener('DOMContentLoaded', () => {
             mainApp.classList.remove('opacity-0');
             
             window.initializeGlassEffects();
+            
+            // Inicia tudo apontando para o DB atual (Mango por padrão)
             listenForFeaturedItems();
-            listenForCatalog();
-
+            window.loadCatalog(false);
             initAddContentLogic(); 
             initBadgeManagerLogic();
             initCarouselLogic(); 
             initAvatarLogic();
             initBackgroundLogic();
             initVerticalBgLogic();
-            initUpdateLogic(); 
             initRequestsLogic(); 
             initVerifyLogic(); 
             initNotificationsLogic(); 
             initAchievementsLogic(); 
+            initUpdateLogic();
 
-            // Ao entrar, verifica se já existe uma rota na URL para carregar direto nela
             const initialPage = window.location.hash.substring(1) || 'addContent';
             navigateTo(initialPage);
 
-            // Transforma os cliques nos menus para mudar a rota (#) ao invés de apenas trocar a classe CSS
             document.querySelectorAll('.nav-link').forEach(l => {
                 l.addEventListener('click', (e) => {
                     e.preventDefault();
-                    window.location.hash = l.dataset.page; // Isso dispara o 'hashchange' automaticamente
+                    window.location.hash = l.dataset.page; 
                 });
             });
             
-            document.getElementById('logout-btn').onclick = () => signOut(auth).then(() => window.location.reload());
+            if(document.getElementById('logout-btn')) document.getElementById('logout-btn').onclick = () => signOut(auth).then(() => window.location.reload());
         } else {
             mainApp.classList.add('opacity-0');
             if (!document.getElementById('login-overlay')) {
                 const lDiv = document.createElement('div'); lDiv.id = 'login-overlay'; lDiv.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md';
-                lDiv.innerHTML = `<div class="glass-container rounded-2xl w-full max-w-md border border-amber-500/20" style="--bg-color: rgba(15,23,42,0.8);"><div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div><div class="glass-content p-8 space-y-6"><div class="text-center"><div class="w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-600 rounded-2xl mx-auto flex items-center justify-center text-3xl mb-4">🥭</div><h1 class="text-3xl font-black text-white">Mango Studio</h1></div><form id="login-form" class="space-y-4"><input type="email" id="l-email" class="w-full p-3 glass-input rounded-xl" placeholder="admin@mango.com" required><input type="password" id="l-pass" class="w-full p-3 glass-input rounded-xl" placeholder="Senha" required><button type="submit" id="l-btn" class="glass-button w-full rounded-xl py-3 text-slate-900" style="--bg-color: rgba(245,158,11,0.8);"><div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div><div class="glass-content"><span class="button-text">Acessar</span><div class="button-spinner"><div class="spinner border-slate-900 border-b-white"></div></div></div></button><p id="l-err" class="text-red-400 text-sm text-center hidden"></p></form></div></div>`;
+                lDiv.innerHTML = `<div class="glass-container rounded-2xl w-full max-w-md border border-amber-500/20" style="--bg-color: rgba(15,23,42,0.8);"><div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div><div class="glass-content p-8 space-y-6"><div class="text-center"><div class="w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-600 rounded-2xl mx-auto flex items-center justify-center text-3xl mb-4">🥭</div><h1 class="text-3xl font-black text-white">Painel Central</h1><p class="text-sm text-slate-400">Mango & Starlight</p></div><form id="login-form" class="space-y-4"><input type="email" id="l-email" class="w-full p-3 glass-input rounded-xl" placeholder="admin@mango.com" required><input type="password" id="l-pass" class="w-full p-3 glass-input rounded-xl" placeholder="Senha" required><button type="submit" id="l-btn" class="glass-button w-full rounded-xl py-3 text-slate-900" style="--bg-color: rgba(245,158,11,0.8);"><div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div><div class="glass-content"><span class="button-text">Acessar</span><div class="button-spinner"><div class="spinner border-slate-900 border-b-white"></div></div></div></button><p id="l-err" class="text-red-400 text-sm text-center hidden"></p></form></div></div>`;
                 document.body.appendChild(lDiv); window.initializeGlassEffects();
                 document.getElementById('login-form').onsubmit = (e) => {
                     e.preventDefault(); const btn = document.getElementById('l-btn'); const err = document.getElementById('l-err'); showButtonSpinner(btn); err.classList.add('hidden');
