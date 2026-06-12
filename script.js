@@ -27,8 +27,9 @@ const starlightConfig = {
 const appMango = initializeApp(mangoConfig, "mango");
 const appStarlight = initializeApp(starlightConfig, "starlight");
 
-// O Auth principal será o do Mango (para você entrar no painel)
-const auth = getAuth(appMango);
+// Autenticações independentes (Precisamos logar em ambos para respeitar as regras)
+const auth = getAuth(appMango); // Principal
+const authStarlight = getAuth(appStarlight); // Secundário
 
 // Instâncias de Bancos de Dados
 const dbMango = getFirestore(appMango);
@@ -391,7 +392,7 @@ function initVerifyLogic() {
         try {
             const usernameDoc = await getDoc(doc(window.getDb(), 'usernames', input));
             if(!usernameDoc.exists()) {
-                resDiv.innerHTML = '<p class="text-red-400 text-center py-4">Usuário não encontrado. O username está correto?</p>';
+                resDiv.innerHTML = '<p class="text-red-400 text-center py-4">Usuário não encontrado no banco atual.</p>';
                 return;
             }
 
@@ -475,7 +476,7 @@ function initVerifyLogic() {
             listDiv.innerHTML = '';
             
             if (snap.empty) {
-                listDiv.innerHTML = '<p class="text-slate-400 text-sm py-4 text-center">Nenhum usuário verificado encontrado.</p>';
+                listDiv.innerHTML = '<p class="text-slate-400 text-sm py-4 text-center">Nenhum usuário verificado encontrado neste DB.</p>';
                 return;
             }
             
@@ -1135,7 +1136,6 @@ window.loadCatalog = async function(isLoadMore = false) {
     try {
         let q;
         // Paginação Padrão vs Busca
-        // Em Firestore, a busca local requer puxar muitos dados. Como é um painel admin, vamos puxar mais se estiver buscando
         if (searchTerm) {
             // Busca (Limite maior temporário)
             q = query(collection(window.getDb(), 'content'), orderBy('updatedAt', 'desc'), limit(150));
@@ -1154,7 +1154,7 @@ window.loadCatalog = async function(isLoadMore = false) {
 
         if (snap.empty && !isLoadMore) {
             list.className = "flex justify-center w-full mt-10";
-            list.innerHTML = '<p class="text-slate-400 text-center py-8 col-span-full font-semibold">Nenhum anime encontrado.</p>';
+            list.innerHTML = '<p class="text-slate-400 text-center py-8 col-span-full font-semibold">Nenhum anime encontrado neste banco de dados.</p>';
             if(loadMoreBtn) loadMoreBtn.classList.add('hidden');
             return;
         }
@@ -1247,7 +1247,6 @@ window.deleteContent = function(id, title) {
     showConfirm('Apagar Obra', `Excluir permanentemente "${title}" do banco de dados?`, async () => {
         await deleteDoc(doc(window.getDb(), 'content', id)); 
         showToast('Excluído com sucesso!');
-        // Remove da lista
         window.loadCatalog(false);
     });
 }
@@ -1808,7 +1807,7 @@ function initCarouselLogic() {
         if(!list) return;
         list.innerHTML = '';
         if (carouselsData.length === 0) {
-            list.innerHTML = '<p class="text-sm text-slate-400">Nenhum carrossel salvo.</p>';
+            list.innerHTML = '<p class="text-sm text-slate-400">Nenhum carrossel salvo no DB ativo.</p>';
             return;
         }
         carouselsData.forEach(c => {
@@ -1869,6 +1868,29 @@ function initCarouselLogic() {
         document.getElementById('carousel-title').value = '';
         document.querySelectorAll('.catalog-check').forEach(c=>c.checked=false);
         document.getElementById('save-carousel-btn').querySelector('.button-text').textContent = "Salvar Novo Carrossel";
+    }
+
+    const saveCarouselBtn = document.getElementById('save-carousel-btn');
+    if(saveCarouselBtn) {
+        saveCarouselBtn.onclick = async () => {
+            const title = document.getElementById('carousel-title').value.trim();
+            const selected = Array.from(document.querySelectorAll('.catalog-check:checked')).map(c => c.value);
+            const id = document.getElementById('carousel-edit-id').value;
+
+            if(!title || !selected.length) return showToast("Preencha título e marque itens.", true);
+            
+            showButtonSpinner(saveCarouselBtn);
+            try {
+                if (id) {
+                    await updateDoc(doc(window.getDb(), 'carousels', id), { title: title, items: selected, updatedAt: serverTimestamp() });
+                    showToast("Carrossel Atualizado!");
+                } else {
+                    await addDoc(collection(window.getDb(), 'carousels'), { title: title, items: selected, isAiGenerated: false, createdAt: serverTimestamp() });
+                    showToast("Carrossel Criado!");
+                }
+                clearCarouselEdit();
+            } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(saveCarouselBtn, 'Salvar Carrossel'); }
+        };
     }
 
     document.getElementById('generate-all-ai-btn').onclick = async () => {
@@ -2095,29 +2117,6 @@ function initCarouselLogic() {
         });
         await Promise.all(savePromises);
         showToast(`A IA gerou ${carouselsArray.length} categorias com sucesso!`);
-    }
-
-    const saveCarouselBtn = document.getElementById('save-carousel-btn');
-    if(saveCarouselBtn) {
-        saveCarouselBtn.onclick = async () => {
-            const title = document.getElementById('carousel-title').value.trim();
-            const selected = Array.from(document.querySelectorAll('.catalog-check:checked')).map(c => c.value);
-            const id = document.getElementById('carousel-edit-id').value;
-
-            if(!title || !selected.length) return showToast("Preencha título e marque itens.", true);
-            
-            showButtonSpinner(saveCarouselBtn);
-            try {
-                if (id) {
-                    await updateDoc(doc(window.getDb(), 'carousels', id), { title: title, items: selected, updatedAt: serverTimestamp() });
-                    showToast("Carrossel Atualizado!");
-                } else {
-                    await addDoc(collection(window.getDb(), 'carousels'), { title: title, items: selected, isAiGenerated: false, createdAt: serverTimestamp() });
-                    showToast("Carrossel Criado!");
-                }
-                clearCarouselEdit();
-            } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(saveCarouselBtn, 'Salvar Carrossel'); }
-        };
     }
 }
 
@@ -2465,7 +2464,6 @@ function initAvatarLogic() {
 // ==========================================
 function initBackgroundLogic() {
     let currentBgUrls = [];
-
     unsubBgs = onSnapshot(collection(window.getDb(), 'background_groups'), (snapshot) => {
         backgroundGroupsData = [];
         snapshot.forEach(doc => backgroundGroupsData.push({ id: doc.id, ...doc.data() }));
@@ -2531,7 +2529,6 @@ function initBackgroundLogic() {
         const data = await fetchTMDB(`${type}/${id}/images`, 'include_image_language=pt,en,null');
         if (data && data.backdrops) {
             const backdrops = data.backdrops.slice(0, 20).map(c => `https://image.tmdb.org/t/p/original${c.file_path}`);
-            
             if (backdrops.length > 0) {
                 currentBgUrls = [...new Set([...currentBgUrls, ...backdrops])]; 
                 renderBgEditorGrid();
@@ -2631,7 +2628,6 @@ function initBackgroundLogic() {
 
 function initVerticalBgLogic() {
     let currentVerticalUrls = [];
-
     unsubVerticalBgs = onSnapshot(collection(window.getDb(), 'vertical_bg_groups'), (snapshot) => {
         verticalGroupsData = [];
         snapshot.forEach(doc => verticalGroupsData.push({ id: doc.id, ...doc.data() }));
@@ -2702,7 +2698,6 @@ function initVerticalBgLogic() {
         const data = await fetchTMDB(`${type}/${id}/images`, 'include_image_language=pt,en,null');
         if (data && data.posters) {
             const posters = data.posters.slice(0, 20).map(c => `${TMDB_IMG_URL}${c.file_path}`);
-            
             if (posters.length > 0) {
                 currentVerticalUrls = [...new Set([...currentVerticalUrls, ...posters])]; 
                 renderVerticalEditorGrid();
@@ -3462,16 +3457,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
             
-            if(document.getElementById('logout-btn')) document.getElementById('logout-btn').onclick = () => signOut(auth).then(() => window.location.reload());
+            if(document.getElementById('logout-btn')) {
+                document.getElementById('logout-btn').onclick = () => {
+                    Promise.all([signOut(auth), signOut(authStarlight)]).then(() => window.location.reload());
+                };
+            }
         } else {
             mainApp.classList.add('opacity-0');
             if (!document.getElementById('login-overlay')) {
                 const lDiv = document.createElement('div'); lDiv.id = 'login-overlay'; lDiv.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md';
                 lDiv.innerHTML = `<div class="glass-container rounded-2xl w-full max-w-md border border-amber-500/20" style="--bg-color: rgba(15,23,42,0.8);"><div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div><div class="glass-content p-8 space-y-6"><div class="text-center"><div class="w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-600 rounded-2xl mx-auto flex items-center justify-center text-3xl mb-4">🥭</div><h1 class="text-3xl font-black text-white">Painel Central</h1><p class="text-sm text-slate-400">Mango & Starlight</p></div><form id="login-form" class="space-y-4"><input type="email" id="l-email" class="w-full p-3 glass-input rounded-xl" placeholder="admin@mango.com" required><input type="password" id="l-pass" class="w-full p-3 glass-input rounded-xl" placeholder="Senha" required><button type="submit" id="l-btn" class="glass-button w-full rounded-xl py-3 text-slate-900" style="--bg-color: rgba(245,158,11,0.8);"><div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div><div class="glass-content"><span class="button-text">Acessar</span><div class="button-spinner"><div class="spinner border-slate-900 border-b-white"></div></div></div></button><p id="l-err" class="text-red-400 text-sm text-center hidden"></p></form></div></div>`;
                 document.body.appendChild(lDiv); window.initializeGlassEffects();
-                document.getElementById('login-form').onsubmit = (e) => {
-                    e.preventDefault(); const btn = document.getElementById('l-btn'); const err = document.getElementById('l-err'); showButtonSpinner(btn); err.classList.add('hidden');
-                    signInWithEmailAndPassword(auth, document.getElementById('l-email').value, document.getElementById('l-pass').value).catch(error => { hideButtonSpinner(btn, 'Acessar'); err.textContent = "Credenciais inválidas."; err.classList.remove('hidden'); });
+                
+                document.getElementById('login-form').onsubmit = async (e) => {
+                    e.preventDefault(); 
+                    const btn = document.getElementById('l-btn'); 
+                    const err = document.getElementById('l-err'); 
+                    showButtonSpinner(btn); 
+                    err.classList.add('hidden');
+
+                    const email = document.getElementById('l-email').value;
+                    const pass = document.getElementById('l-pass').value;
+
+                    try {
+                        await Promise.all([
+                            signInWithEmailAndPassword(auth, email, pass),
+                            signInWithEmailAndPassword(authStarlight, email, pass)
+                        ]);
+                    } catch(error) {
+                        hideButtonSpinner(btn, 'Acessar'); 
+                        err.textContent = "Credenciais inválidas ou sem permissão."; 
+                        err.classList.remove('hidden');
+                        console.error("Erro no login duplo:", error);
+                    }
                 };
             }
         }
