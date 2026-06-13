@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel Central - Mango & Starlight</title>
+    <title>Mango Studio - Painel de Controle</title>
     
     <!-- Tailwind CSS (via CDN para facilitar) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -40,17 +40,17 @@
             <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
             <div class="glass-content flex flex-col h-full">
                 <div class="h-24 flex-shrink-0 flex items-center gap-3 px-6 border-b border-amber-500/10">
-                    <div class="w-10 h-10 bg-gradient-to-br from-amber-400 to-indigo-600 rounded-lg flex items-center justify-center text-xl shadow-lg shadow-orange-500/30">🌌</div>
+                    <div class="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-600 rounded-lg flex items-center justify-center text-xl shadow-lg shadow-orange-500/30">🥭</div>
                     <div>
-                        <h1 class="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-indigo-400">Painel Central</h1>
-                        <p class="text-[10px] text-slate-400 font-semibold tracking-widest uppercase">Mango & Starlight</p>
+                        <h1 class="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">Mango</h1>
+                        <p class="text-xs text-slate-400 font-semibold tracking-widest uppercase">Studio Admin</p>
                     </div>
                 </div>
                 
                 <nav class="flex-1 flex flex-col gap-1 p-4 overflow-y-auto mt-2">
                     <a href="#" class="nav-link active flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="addContent">
                         <svg class="nav-icon h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                        <span class="font-medium">Adicionar Obra</span>
+                        <span class="font-medium">Adicionar Anime</span>
                     </a>
                     <a href="#" class="nav-link flex items-center gap-3 px-4 py-3 text-slate-300 hover:bg-slate-800/50 rounded-lg transition-all" data-page="manageContent">
                         <svg class="nav-icon h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
@@ -332,23 +332,13 @@
                                     </div>
                                     
                                     <div class="pt-4 border-t border-amber-500/20">
-                                        <!-- NOVO: Seletor de Destino Multi-App -->
-                                        <div class="mb-4">
-                                            <label class="block text-sm font-bold text-amber-500 mb-2">Salvar em qual Banco de Dados?</label>
-                                            <select id="target-site-add" class="w-full p-4 glass-input rounded-xl text-lg font-bold text-white cursor-pointer transition-all">
-                                                <option value="both">🥭 Mango + ⭐ Starlight (Ambos)</option>
-                                                <option value="mango" selected>🥭 Apenas Mango</option>
-                                                <option value="starlight">⭐ Apenas Starlight</option>
-                                            </select>
-                                        </div>
-
                                         <label class="flex items-center gap-3 mb-4 cursor-pointer">
                                             <input type="checkbox" id="notify-add" class="w-5 h-5 text-amber-500 rounded border-gray-500 bg-transparent focus:ring-amber-500" checked>
                                             <span class="text-sm font-bold text-sky-400">🔔 Enviar notificação de Lançamento (Para todos os usuários)</span>
                                         </label>
                                         <button type="submit" id="save-btn" class="glass-button w-full rounded-xl py-4 text-lg" style="--bg-color: rgba(16, 185, 129, 0.7);">
                                             <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
-                                            <div class="glass-content text-white"><span class="button-text">Salvar Obra</span><div class="button-spinner"><div class="spinner"></div></div></div>
+                                            <div class="glass-content text-white"><span class="button-text">Salvar no Mango</span><div class="button-spinner"><div class="spinner"></div></div></div>
                                         </button>
                                     </div>
                                 </form>
@@ -361,35 +351,15 @@
                 <div id="manageContent" class="content-page space-y-6">
                     <div class="flex items-center gap-3 px-2 mb-6">
                         <div class="p-2 bg-blue-500/20 rounded-lg text-blue-500"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg></div>
-                        <h1 class="text-3xl font-bold text-white">Catálogo do App</h1>
+                        <h1 class="text-3xl font-bold text-white">Catálogo Mango</h1>
                     </div>
 
                     <div class="glass-container rounded-2xl" style="--bg-color: rgba(15, 23, 42, 0.6);">
                         <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
                         <div class="glass-content p-6">
-                            
-                            <!-- NOVO: Seletor de Banco de Dados Global -->
-                            <div class="flex gap-4 mb-6 p-2 bg-black/40 rounded-xl border border-slate-700/50">
-                                <button class="site-selector-btn flex-1 py-3 px-4 rounded-lg font-bold text-white transition-all ring-2 ring-amber-500 bg-amber-500/20" data-site="mango" onclick="switchManageSite('mango')">
-                                    🥭 Mango
-                                </button>
-                                <button class="site-selector-btn flex-1 py-3 px-4 rounded-lg font-bold text-white transition-all hover:bg-indigo-500/20" data-site="starlight" onclick="switchManageSite('starlight')">
-                                    ⭐ Starlight
-                                </button>
-                            </div>
-
-                            <input type="text" id="catalog-search" placeholder="Pesquisar animes salvos no banco ativo..." class="w-full p-4 glass-input rounded-xl mb-6 text-lg">
-                            
+                            <input type="text" id="catalog-search" placeholder="Pesquisar animes salvos..." class="w-full p-4 glass-input rounded-xl mb-6 text-lg">
                             <div id="catalog-list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[65vh] overflow-y-auto pr-2 pb-4">
                                 <div class="col-span-full spinner-lg mx-auto"></div>
-                            </div>
-                            
-                            <!-- NOVO: Botão de Carregar Mais -->
-                            <div class="flex justify-center mt-6">
-                                <button id="load-more-catalog-btn" class="hidden glass-button rounded-xl py-3 px-8" style="--bg-color: rgba(59, 130, 246, 0.6);" onclick="loadCatalog(true)">
-                                    <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
-                                    <div class="glass-content text-white font-bold">Carregar Mais...</div>
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -409,7 +379,7 @@
                             <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
                             <div class="glass-content flex flex-col h-full">
                                 <div class="p-4 border-b border-slate-700/50">
-                                    <input type="text" id="bm-search" class="w-full p-3 glass-input rounded-xl text-sm" placeholder="Pesquisar anime no banco ativo...">
+                                    <input type="text" id="bm-search" class="w-full p-3 glass-input rounded-xl text-sm" placeholder="Pesquisar anime ou série...">
                                 </div>
                                 <div id="bm-list" class="flex-1 overflow-y-auto p-4 space-y-2">
                                     <div class="text-center py-10"><div class="spinner border-slate-900 border-b-white"></div></div>
@@ -541,7 +511,7 @@
                             <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
                             <div class="glass-content p-6 md:p-8 space-y-6">
                                 <h3 class="text-xl font-bold text-white mb-2">Conceder ou Remover Verificação</h3>
-                                <p class="text-sm text-slate-400 mb-6">Digite o nome de usuário (com ou sem @) para encontrar o perfil e alterar o status do selo azul no Banco atual.</p>
+                                <p class="text-sm text-slate-400 mb-6">Digite o nome de usuário (com ou sem @) para encontrar o perfil e alterar o status do selo azul.</p>
                                 
                                 <div class="flex flex-col gap-4">
                                     <input type="text" id="verify-username-search" placeholder="@nome_de_usuario" class="w-full p-4 glass-input rounded-xl text-lg text-white font-bold">
@@ -758,7 +728,7 @@
                                     <div class="flex items-center gap-2 mb-2">
                                         <span class="text-2xl">✨</span><h3 class="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-500">IA Curador</h3>
                                     </div>
-                                    <p class="text-xs text-slate-400">Escolha a IA, defina a quantidade e gere sugestões temáticas com base no BD ativo.</p>
+                                    <p class="text-xs text-slate-400">Escolha a IA, defina a quantidade e gere sugestões temáticas criativas.</p>
                                     
                                     <div class="space-y-3">
                                         <div class="grid grid-cols-2 gap-2">
@@ -821,7 +791,7 @@
                                 </div>
 
                                 <div class="flex-1 flex flex-col min-h-[350px] mt-4">
-                                    <label class="block text-xs font-bold text-slate-300 mb-2">Marque os conteúdos para esta categoria (Do banco atual):</label>
+                                    <label class="block text-xs font-bold text-slate-300 mb-2">Marque os conteúdos para esta categoria:</label>
                                     <div id="carousel-items-grid" class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 pr-2">
                                         <div class="spinner-lg mx-auto col-span-full mt-10"></div>
                                     </div>
@@ -1372,6 +1342,7 @@
         </div>
     </div>
 
+    <!-- O Script foi movido para o arquivo script.js -->
     <script type="module" src="script.js"></script>
 </body>
 </html>
