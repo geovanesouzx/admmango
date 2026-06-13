@@ -1110,14 +1110,34 @@ window.handleAddSeasonClick = async function(seasonNum, btnElement, isEdit, tmdb
 }
 
 // ==========================================
-// CATÁLOGO COM PAGINAÇÃO (CARREGAR MAIS)
+// CATÁLOGO COM PAGINAÇÃO (CARREGAR MAIS E DESTAQUES)
 // ==========================================
+
 function listenForFeaturedItems() {
     unsubFeatured = onSnapshot(doc(window.getDb(), 'config', 'featured'), (docSnap) => {
         featuredItemIds = docSnap.exists() ? (docSnap.data()?.items || []) : [];
-        if(catalogData.length > 0) renderCatalogItems(catalogData, true); // re-render para mostrar destaques
+        // Atualiza apenas os botões visualmente sem recriar o DOM inteiro e duplicar os itens
+        window.updateFeaturedButtonsInDOM();
     });
 }
+
+window.updateFeaturedButtonsInDOM = function() {
+    const list = document.getElementById('catalog-list');
+    if (!list) return;
+    
+    // Procura todos os botões de destaque que têm a classe 'btn-feature'
+    const btns = list.querySelectorAll('.btn-feature');
+    btns.forEach(btn => {
+        const id = btn.dataset.id;
+        const isFeatured = featuredItemIds.includes(id);
+        const featColor = isFeatured ? 'rgba(245,158,11,0.8)' : 'rgba(100,116,139,0.5)';
+        const featText = isFeatured ? '⭐ Destaque' : '☆ Destacar';
+        
+        btn.style.setProperty('--bg-color', featColor);
+        const contentDiv = btn.querySelector('.glass-content');
+        if(contentDiv) contentDiv.textContent = featText;
+    });
+};
 
 // Essa função agora é ativada pelo HTML quando clicamos "Carregar Mais" ou buscamos
 window.loadCatalog = async function(isLoadMore = false) {
@@ -1209,7 +1229,7 @@ function renderCatalogItems(items, isAppend = false) {
                 <h4 class="font-bold text-white truncate text-base mb-1" title="${escapeHTML(item.title)}">${escapeHTML(item.title)}</h4>
                 <p class="text-xs text-amber-500 mb-3 font-semibold">${item.type==='tv'?'Série':'Filme'} • ${escapeHTML(item.year)}</p>
                 <div class="flex flex-wrap gap-2 mt-auto">
-                    <button class="glass-button rounded-lg py-1.5 px-3 text-xs flex-1" style="--bg-color:${featColor};" onclick="toggleFeaturedItem('${item.id}')"><div class="glass-content">${featText}</div></button>
+                    <button class="btn-feature glass-button rounded-lg py-1.5 px-3 text-xs flex-1" data-id="${item.id}" style="--bg-color:${featColor};" onclick="toggleFeaturedItem('${item.id}')"><div class="glass-content">${featText}</div></button>
                     <button class="glass-button rounded-lg py-1.5 px-3 text-xs" style="--bg-color:rgba(147,51,234,0.6);" onclick="openEditPage('${item.id}')"><div class="glass-content">✏️</div></button>
                     <button class="glass-button rounded-lg py-1.5 px-3 text-xs" style="--bg-color:rgba(220,38,38,0.6);" onclick="deleteContent('${item.id}', '${escapeHTML(item.title).replace(/'/g, "\\'")}')"><div class="glass-content">🗑️</div></button>
                 </div>
@@ -1240,7 +1260,10 @@ window.toggleFeaturedItem = async function(docId) {
             await setDoc(doc(window.getDb(), 'config', 'featured'), { items: newItems }, { merge: true }); 
             showToast('Adicionado aos destaques!'); 
         }
-    } catch (err) { showToast('Erro ao atualizar.', true); }
+    } catch (err) { 
+        console.error("Erro toggle destaque:", err);
+        showToast('Erro ao atualizar. Verifique permissões.', true); 
+    }
 }
 
 window.deleteContent = function(id, title) {
