@@ -1444,6 +1444,32 @@ window.openEditPage = async (docId) => {
         document.getElementById('edit-custom-logo').value = item.logo || '';
     }
 
+    // ==============================================================
+    // INSERE O SELETOR DE ONDE SALVAR A EDIÇÃO (MANGO, STARLIGHT, AMBOS)
+    // ==============================================================
+    const editForm = document.getElementById('edit-form');
+    if (!document.getElementById('target-site-edit-wrapper') && editForm) {
+        const saveBtn = document.getElementById('edit-save-btn');
+        if (saveBtn) {
+            const wrapper = document.createElement('div');
+            wrapper.id = 'target-site-edit-wrapper';
+            wrapper.className = 'col-span-full mb-4 mt-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl';
+            wrapper.innerHTML = `
+                <label class="block text-sm font-bold text-amber-500 mb-2">🌍 Onde aplicar as edições?</label>
+                <select id="target-site-edit" class="w-full p-3 glass-input rounded-xl text-white font-bold cursor-pointer">
+                    <option value="both" selected>Ambos (Mango e Starlight)</option>
+                    <option value="mango">Apenas Mango (App)</option>
+                    <option value="starlight">Apenas Starlight (Site)</option>
+                </select>
+                <p class="text-[10px] text-slate-400 mt-1">Ao editar, você atualizará os dados no(s) banco(s) selecionado(s).</p>
+            `;
+            saveBtn.parentNode.insertBefore(wrapper, saveBtn);
+        }
+    } else if (document.getElementById('target-site-edit')) {
+        document.getElementById('target-site-edit').value = 'both'; // Volta para o padrão
+    }
+    // ==============================================================
+
     const urlContainer = document.getElementById('edit-url-container');
     const list = document.getElementById('edit-seasons-list');
     const addArea = document.getElementById('edit-add-season-wrapper');
@@ -1648,7 +1674,22 @@ document.getElementById('edit-form').onsubmit = async (e) => {
             p.seasons = sMap;
         }
         
-        await updateDoc(doc(window.getDb(), 'content', docId), p);
+        // ==============================================================
+        // LÓGICA MULTI-SITE ATUALIZADA PARA O EDIT
+        // ==============================================================
+        const targetSiteEditSelect = document.getElementById('target-site-edit');
+        const siteChoice = targetSiteEditSelect ? targetSiteEditSelect.value : 'both';
+        const dbsToSave = [];
+
+        if(siteChoice === 'mango' || siteChoice === 'both') dbsToSave.push(dbMango);
+        if(siteChoice === 'starlight' || siteChoice === 'both') dbsToSave.push(dbStarlight);
+
+        for (const targetDb of dbsToSave) {
+            // Usamos setDoc com merge: true. Assim, se o conteúdo não existir em um dos bancos,
+            // ele será criado automaticamente sem falhar, servindo como uma "transferência/update".
+            await setDoc(doc(targetDb, 'content', docId), p, { merge: true });
+        }
+        // ==============================================================
         
         if (document.getElementById('notify-edit') && document.getElementById('notify-edit').checked) {
             await window.sendPushNotification(`content_${docId}`, 'Tem novidade! 📺', `${p.title} acaba de receber uma atualização!`);
@@ -1657,7 +1698,7 @@ document.getElementById('edit-form').onsubmit = async (e) => {
             await window.sendToTelegram(p.title, synopsisToUse, p.poster, true);
         }
 
-        showToast(`Editado com sucesso em ${window.currentManageSite.toUpperCase()}!`); 
+        showToast(`Editado com sucesso em: ${siteChoice.toUpperCase()}!`); 
         setTimeout(()=> { window.location.hash = 'manageContent'; }, 1000);
     } catch(e) { showToast(e.message, true); } finally { hideButtonSpinner(btn, 'Salvar Alterações'); }
 };
