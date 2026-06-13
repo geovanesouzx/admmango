@@ -38,7 +38,7 @@ const dbStarlight = getFirestore(appStarlight);
 // Estado de Gerenciamento Atual (Alterne isso no HTML)
 window.currentManageSite = 'mango'; // 'mango' ou 'starlight'
 
-// Função auxiliar para retornar o banco de dados focado no momento
+// Função auxiliar para retornar o banco de dados focado no momento (Para o Catálogo Geral)
 window.getDb = () => window.currentManageSite === 'starlight' ? dbStarlight : dbMango;
 
 // ==========================================
@@ -178,7 +178,7 @@ async function fetchTmdbAgeRating(id, type) {
 }
 
 // ==========================================
-// SISTEMA DE TROCA DE SITE (MANGO / STARLIGHT)
+// SISTEMA DE TROCA DE SITE (APENAS PARA O CATÁLOGO GERAL)
 // ==========================================
 window.switchManageSite = function(siteId) {
     window.currentManageSite = siteId;
@@ -189,34 +189,18 @@ window.switchManageSite = function(siteId) {
         else btn.classList.remove('ring-2', 'ring-amber-500');
     });
 
-    showToast(`Painel alterado para o banco de dados: ${siteId.toUpperCase()}`);
+    showToast(`Painel Catálogo alterado para: ${siteId.toUpperCase()}`);
     
-    // Desinscreve ouvintes antigos
+    // Desinscreve ouvintes do catálogo geral
     if(unsubFeatured) unsubFeatured();
-    if(unsubCarousels) unsubCarousels();
-    if(unsubAvatars) unsubAvatars();
-    if(unsubBgs) unsubBgs();
-    if(unsubVerticalBgs) unsubVerticalBgs();
-    if(unsubRequests) unsubRequests();
-    if(unsubAchievements) unsubAchievements();
-    if(unsubUpdates) unsubUpdates();
 
-    // Recarrega todos os ouvintes no novo BD
+    // Recarrega Catálogo Principal e Destaques (Este é o único que muda de BD)
     listenForFeaturedItems();
-    initCarouselLogic(); 
-    initAvatarLogic();
-    initBackgroundLogic();
-    initVerticalBgLogic();
-    initRequestsLogic(); 
-    initAchievementsLogic();
-    initUpdateLogic();
-    
-    // Recarrega Catálogo
     window.loadCatalog(false);
 };
 
 // ==========================================
-// SISTEMA DE NOTIFICAÇÕES (IN-APP, PUSH E TELEGRAM)
+// SISTEMA DE NOTIFICAÇÕES (IN-APP, PUSH E TELEGRAM) -> EXCLUSIVO MANGO
 // ==========================================
 window.sendToTelegram = async function(title, synopsis, imageUrl, isUpdate = false) {
     if (!telegramConfig.active || !telegramConfig.botToken || !telegramConfig.channels) return;
@@ -255,7 +239,7 @@ window.sendToTelegram = async function(title, synopsis, imageUrl, isUpdate = fal
 window.sendPushNotification = async function(topic, title, body) {
     let webhookUrl = '';
     try {
-        const conf = await getDoc(doc(window.getDb(), 'config', 'fcm'));
+        const conf = await getDoc(doc(dbMango, 'config', 'fcm'));
         if (conf.exists()) webhookUrl = conf.data().webhookUrl;
     } catch(e){}
 
@@ -276,15 +260,15 @@ window.sendPushNotification = async function(topic, title, body) {
 
 window.sendInAppNotification = async function(uidList, title, message) {
     try {
-        const batch = writeBatch(window.getDb());
+        const batch = writeBatch(dbMango);
         let count = 0;
         
         const limitedUids = uidList.slice(0, 150); 
         
         for (const uid of limitedUids) {
-            const profilesSnap = await getDocs(collection(window.getDb(), 'users', uid, 'profiles'));
+            const profilesSnap = await getDocs(collection(dbMango, 'users', uid, 'profiles'));
             profilesSnap.forEach(pDoc => {
-                const notifRef = doc(collection(window.getDb(), 'users', uid, 'profiles', pDoc.id, 'notifications'));
+                const notifRef = doc(collection(dbMango, 'users', uid, 'profiles', pDoc.id, 'notifications'));
                 batch.set(notifRef, {
                     title: title,
                     message: message,
@@ -303,13 +287,13 @@ window.sendInAppNotification = async function(uidList, title, message) {
 };
 
 function initNotificationsLogic() {
-    getDoc(doc(window.getDb(), 'config', 'fcm')).then(docSnap => {
+    getDoc(doc(dbMango, 'config', 'fcm')).then(docSnap => {
         if (docSnap.exists() && docSnap.data().webhookUrl) {
             if(document.getElementById('notif-webhook-url')) document.getElementById('notif-webhook-url').value = docSnap.data().webhookUrl;
         }
     });
 
-    getDoc(doc(window.getDb(), 'config', 'telegram')).then(docSnap => {
+    getDoc(doc(dbMango, 'config', 'telegram')).then(docSnap => {
         if (docSnap.exists()) {
             telegramConfig = docSnap.data();
             if(document.getElementById('tg-bot-token')) document.getElementById('tg-bot-token').value = telegramConfig.botToken || '';
@@ -326,7 +310,7 @@ function initNotificationsLogic() {
             const btn = document.getElementById('save-webhook-btn');
             showButtonSpinner(btn);
             try {
-                await setDoc(doc(window.getDb(), 'config', 'fcm'), { webhookUrl: document.getElementById('notif-webhook-url').value }, { merge: true });
+                await setDoc(doc(dbMango, 'config', 'fcm'), { webhookUrl: document.getElementById('notif-webhook-url').value }, { merge: true });
                 showToast("URL do Webhook atualizado com sucesso!");
             } catch(err) {
                 showToast("Erro ao salvar Webhook.", true);
@@ -348,7 +332,7 @@ function initNotificationsLogic() {
                     appLink: document.getElementById('tg-app-link').value.trim(),
                     active: document.getElementById('tg-active').checked
                 };
-                await setDoc(doc(window.getDb(), 'config', 'telegram'), telegramConfig, { merge: true });
+                await setDoc(doc(dbMango, 'config', 'telegram'), telegramConfig, { merge: true });
                 showToast("Configurações do Telegram salvas!");
             } catch(err) {
                 showToast("Erro ao salvar Telegram.", true);
@@ -377,7 +361,7 @@ function initNotificationsLogic() {
 }
 
 // ==========================================
-// SISTEMA DE VERIFICAÇÃO (SELO AZUL)
+// SISTEMA DE VERIFICAÇÃO (SELO AZUL) -> EXCLUSIVO MANGO
 // ==========================================
 function initVerifyLogic() {
     window.searchUserForVerification = async function() {
@@ -390,17 +374,17 @@ function initVerifyLogic() {
         resDiv.innerHTML = '<div class="spinner mx-auto block mt-4"></div>';
 
         try {
-            const usernameDoc = await getDoc(doc(window.getDb(), 'usernames', input));
+            const usernameDoc = await getDoc(doc(dbMango, 'usernames', input));
             if(!usernameDoc.exists()) {
-                resDiv.innerHTML = '<p class="text-red-400 text-center py-4">Usuário não encontrado no banco atual.</p>';
+                resDiv.innerHTML = '<p class="text-red-400 text-center py-4">Usuário não encontrado no MANGO.</p>';
                 return;
             }
 
             const { uid, profileId } = usernameDoc.data();
-            const profileDoc = await getDoc(doc(window.getDb(), 'users', uid, 'profiles', profileId));
+            const profileDoc = await getDoc(doc(dbMango, 'users', uid, 'profiles', profileId));
             
             if(!profileDoc.exists()) {
-                resDiv.innerHTML = '<p class="text-red-400 text-center py-4">Perfil não encontrado no banco de dados.</p>';
+                resDiv.innerHTML = '<p class="text-red-400 text-center py-4">Perfil não encontrado no MANGO.</p>';
                 return;
             }
 
@@ -438,22 +422,22 @@ function initVerifyLogic() {
             newState ? 'Deseja conceder o selo azul para este usuário? Isto vai atualizar todos os comentários dele.' : 'Deseja remover o selo azul deste usuário?', 
             async () => {
                 try {
-                    await updateDoc(doc(window.getDb(), 'users', uid, 'profiles', profileId), {
+                    await updateDoc(doc(dbMango, 'users', uid, 'profiles', profileId), {
                         isVerified: newState
                     });
 
-                    const commentsQuery = query(collection(window.getDb(), 'comments'), where('profileId', '==', profileId));
+                    const commentsQuery = query(collection(dbMango, 'comments'), where('profileId', '==', profileId));
                     const commentsSnap = await getDocs(commentsQuery);
                     
                     if (!commentsSnap.empty) {
-                        const batch = writeBatch(window.getDb());
+                        const batch = writeBatch(dbMango);
                         commentsSnap.forEach(cDoc => {
                             batch.update(cDoc.ref, { isAuthorVerified: newState });
                         });
                         await batch.commit();
                     }
 
-                    showToast(newState ? 'Usuário verificado com sucesso!' : 'Selo removido com sucesso!');
+                    showToast(newState ? 'Usuário verificado com sucesso no MANGO!' : 'Selo removido com sucesso!');
                     document.getElementById('verify-search-btn').click();
                     loadVerifiedUsers();
                 } catch(e) {
@@ -470,13 +454,13 @@ function initVerifyLogic() {
         listDiv.innerHTML = '<div class="spinner mx-auto block mt-4"></div>';
         
         try {
-            const q = query(collectionGroup(window.getDb(), 'profiles'), where('isVerified', '==', true));
+            const q = query(collectionGroup(dbMango, 'profiles'), where('isVerified', '==', true));
             const snap = await getDocs(q);
             
             listDiv.innerHTML = '';
             
             if (snap.empty) {
-                listDiv.innerHTML = '<p class="text-slate-400 text-sm py-4 text-center">Nenhum usuário verificado encontrado neste DB.</p>';
+                listDiv.innerHTML = '<p class="text-slate-400 text-sm py-4 text-center">Nenhum usuário verificado encontrado no MANGO.</p>';
                 return;
             }
             
@@ -506,16 +490,17 @@ function initVerifyLogic() {
             });
         } catch(e) {
             console.error(e);
-            listDiv.innerHTML = '<p class="text-red-400 text-sm py-2">Erro ao carregar lista. Verifique os índices.</p>';
+            listDiv.innerHTML = '<p class="text-red-400 text-sm py-2">Erro ao carregar lista. Verifique os índices do MANGO.</p>';
         }
     };
 }
 
 // ==========================================
-// SISTEMA DE PEDIDOS
+// SISTEMA DE PEDIDOS -> EXCLUSIVO MANGO
 // ==========================================
 function initRequestsLogic() {
-    unsubRequests = onSnapshot(collection(window.getDb(), 'requests'), (snapshot) => {
+    if(unsubRequests) unsubRequests();
+    unsubRequests = onSnapshot(collection(dbMango, 'requests'), (snapshot) => {
         requestsData = [];
         snapshot.forEach(doc => requestsData.push({ id: doc.id, ...doc.data() }));
         renderRequests();
@@ -538,7 +523,7 @@ function renderRequests() {
     if(!list) return;
     list.innerHTML = '';
     if (requestsData.length === 0) {
-        list.innerHTML = '<p class="text-slate-400 text-center py-8">Nenhum pedido encontrado.</p>';
+        list.innerHTML = '<p class="text-slate-400 text-center py-8">Nenhum pedido encontrado no MANGO.</p>';
         return;
     }
 
@@ -586,7 +571,7 @@ function renderRequests() {
 
 window.updateRequestStatus = async function(id, status) {
     try {
-        await updateDoc(doc(window.getDb(), 'requests', id), { status: status });
+        await updateDoc(doc(dbMango, 'requests', id), { status: status });
         showToast("Status do pedido atualizado!");
 
         if (status === 'ADDED') {
@@ -605,14 +590,14 @@ window.updateRequestStatus = async function(id, status) {
             }
         }
     } catch (e) {
-        showToast("Erro ao atualizar status.", true);
+        showToast("Erro ao atualizar status no MANGO.", true);
     }
 };
 
 window.deleteRequest = function(id) {
     showConfirm('Excluir Pedido', 'Tem certeza que deseja apagar este pedido permanentemente?', async () => {
         try {
-            await deleteDoc(doc(window.getDb(), 'requests', id));
+            await deleteDoc(doc(dbMango, 'requests', id));
             showToast('Pedido excluído com sucesso!');
         } catch (e) {
             showToast('Erro ao excluir pedido.', true);
@@ -626,7 +611,7 @@ window.goToAddFromRequest = function(tmdbId, mediaType) {
 };
 
 // ==========================================
-// SISTEMA DE IMAGENS DO TMDB
+// SISTEMA DE IMAGENS DO TMDB (CATÁLOGO GERAL)
 // ==========================================
 window.openTmdbImages = async function(mode) {
     const tmdbId = mode === 'add' ? document.getElementById('tmdb-id').value : document.getElementById('edit-tmdb-id').value;
@@ -693,7 +678,7 @@ window.openTmdbImages = async function(mode) {
 }
 
 // ==========================================
-// SISTEMA UNIFICADO DE TEMPORADAS E EPISÓDIOS
+// SISTEMA UNIFICADO DE TEMPORADAS E EPISÓDIOS (CATÁLOGO GERAL)
 // ==========================================
 function createEpisodeRow(episodeNumber, episodeName = '', episodeOverview = '', stillPath = '', isManual = false, existingUrl = '', existingAltUrl = '', isComingSoon = false, tmdbSeason = '', tmdbEp = '') {
     let displayUrl = 'https://placehold.co/120x67/1c1917/999999?text=EP';
@@ -1277,7 +1262,7 @@ window.deleteContent = function(id, title) {
 }
 
 // ==========================================
-// ADICIONAR / EDITAR LÓGICA
+// ADICIONAR / EDITAR LÓGICA DO CATÁLOGO
 // ==========================================
 function initAddContentLogic() {
     document.getElementById('search-tmdb-btn').onclick = async () => {
@@ -1704,7 +1689,7 @@ document.getElementById('edit-form').onsubmit = async (e) => {
 };
 
 // ==========================================
-// GERENCIADOR DE SELOS RÁPIDO 
+// GERENCIADOR DE SELOS RÁPIDO -> EXCLUSIVO MANGO
 // ==========================================
 function initBadgeManagerLogic() {
     window.renderBmList = async function() {
@@ -1713,8 +1698,8 @@ function initBadgeManagerLogic() {
         list.innerHTML = '<div class="spinner mx-auto my-4 block"></div>';
         
         try {
-            // Busca os itens diretamente do banco para não depender da paginação local
-            const q = query(collection(window.getDb(), 'content'), limit(200));
+            // Busca os itens diretamente do banco Mango
+            const q = query(collection(dbMango, 'content'), limit(200));
             const snap = await getDocs(q);
             let items = [];
             snap.forEach(d => items.push({ id: d.id, ...d.data() }));
@@ -1724,7 +1709,7 @@ function initBadgeManagerLogic() {
                 .sort((a,b) => a.title.localeCompare(b.title));
 
             if(filtered.length === 0) {
-                list.innerHTML = '<p class="text-slate-400 text-center text-sm py-4">Nenhum anime encontrado.</p>';
+                list.innerHTML = '<p class="text-slate-400 text-center text-sm py-4">Nenhum anime encontrado no MANGO.</p>';
                 return;
             }
 
@@ -1809,11 +1794,11 @@ function initBadgeManagerLogic() {
 
         showButtonSpinner(btn);
         try {
-            await updateDoc(doc(window.getDb(), 'content', id), {
+            await updateDoc(doc(dbMango, 'content', id), {
                 badgeText: text,
                 badgeExpiration: expirationTs
             });
-            showToast("Selo atualizado com sucesso!");
+            showToast("Selo atualizado com sucesso no MANGO!");
             renderBmList(); // Atualiza a lista com as mudanças
         } catch (err) {
             console.error(err);
@@ -1825,7 +1810,7 @@ function initBadgeManagerLogic() {
 }
 
 // ==========================================
-// LÓGICA DE GERAÇÃO AVANÇADA DE CARROSSEL COM IA
+// LÓGICA DE GERAÇÃO AVANÇADA DE CARROSSEL COM IA -> EXCLUSIVO MANGO
 // ==========================================
 function initCarouselLogic() {
     const savedGeminiKey = localStorage.getItem('mango_gemini_key');
@@ -1837,7 +1822,8 @@ function initCarouselLogic() {
     const grid = document.getElementById('carousel-items-grid');
     let pendingAiCarousels = []; 
     
-    unsubCarousels = onSnapshot(collection(window.getDb(), 'carousels'), (snapshot) => {
+    if(unsubCarousels) unsubCarousels();
+    unsubCarousels = onSnapshot(collection(dbMango, 'carousels'), (snapshot) => {
         carouselsData = [];
         snapshot.forEach(doc => carouselsData.push({ id: doc.id, ...doc.data() }));
         renderSavedCarousels();
@@ -1846,9 +1832,9 @@ function initCarouselLogic() {
     async function renderGrid() {
         if(!grid) return;
         
-        // Pega todos/os mais recentes conteúdos p/ não ficar limitado a 24
+        // Pega todos/os mais recentes conteúdos do MANGO p/ não ficar limitado a 24
         try {
-            const snap = await getDocs(query(collection(window.getDb(), 'content'), orderBy('updatedAt', 'desc'), limit(300)));
+            const snap = await getDocs(query(collection(dbMango, 'content'), orderBy('updatedAt', 'desc'), limit(300)));
             const allContentForCarousel = [];
             snap.forEach(d => allContentForCarousel.push({id: d.id, ...d.data()}));
             
@@ -1873,7 +1859,7 @@ function initCarouselLogic() {
         if(!list) return;
         list.innerHTML = '';
         if (carouselsData.length === 0) {
-            list.innerHTML = '<p class="text-sm text-slate-400">Nenhum carrossel salvo no DB ativo.</p>';
+            list.innerHTML = '<p class="text-sm text-slate-400">Nenhum carrossel salvo no MANGO.</p>';
             return;
         }
         carouselsData.forEach(c => {
@@ -1905,19 +1891,19 @@ function initCarouselLogic() {
 
     window.deleteCarousel = function(id) {
         showConfirm('Apagar Carrossel', 'Deseja apagar esta categoria da Home do App?', async () => {
-            await deleteDoc(doc(window.getDb(), 'carousels', id));
+            await deleteDoc(doc(dbMango, 'carousels', id));
             showToast('Carrossel apagado!');
         });
     };
 
     window.deleteAllCarousels = function() {
-        showConfirm('Apagar TODOS', 'Tem certeza absoluta? Isso excluirá todas as categorias (manuais e geradas por IA).', async () => {
+        showConfirm('Apagar TODOS', 'Tem certeza absoluta? Isso excluirá todas as categorias (manuais e geradas por IA) no MANGO.', async () => {
             try {
-                const snap = await getDocs(collection(window.getDb(), 'carousels'));
+                const snap = await getDocs(collection(dbMango, 'carousels'));
                 if (snap.empty) return showToast('Nenhum carrossel para apagar.');
                 
                 showToast('Apagando todos os carrosséis...');
-                const deletePromises = snap.docs.map(d => deleteDoc(doc(window.getDb(), 'carousels', d.id)));
+                const deletePromises = snap.docs.map(d => deleteDoc(doc(dbMango, 'carousels', d.id)));
                 await Promise.all(deletePromises);
                 
                 showToast('Todos os carrosséis foram apagados!');
@@ -1948,11 +1934,11 @@ function initCarouselLogic() {
             showButtonSpinner(saveCarouselBtn);
             try {
                 if (id) {
-                    await updateDoc(doc(window.getDb(), 'carousels', id), { title: title, items: selected, updatedAt: serverTimestamp() });
-                    showToast("Carrossel Atualizado!");
+                    await updateDoc(doc(dbMango, 'carousels', id), { title: title, items: selected, updatedAt: serverTimestamp() });
+                    showToast("Carrossel Atualizado no MANGO!");
                 } else {
-                    await addDoc(collection(window.getDb(), 'carousels'), { title: title, items: selected, isAiGenerated: false, createdAt: serverTimestamp() });
-                    showToast("Carrossel Criado!");
+                    await addDoc(collection(dbMango, 'carousels'), { title: title, items: selected, isAiGenerated: false, createdAt: serverTimestamp() });
+                    showToast("Carrossel Criado no MANGO!");
                 }
                 clearCarouselEdit();
             } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(saveCarouselBtn, 'Salvar Carrossel'); }
@@ -1976,15 +1962,15 @@ function initCarouselLogic() {
         if(aiModel === 'gemini' && !geminiKey) return showToast("Por favor, insira a chave da API do Gemini.", true);
         if(aiModel === 'groq' && !groqKey) return showToast("Por favor, insira a chave da API da Groq.", true);
         
-        // Puxa lista para dar para IA
-        const snap = await getDocs(query(collection(window.getDb(), 'content'), limit(300)));
+        // Puxa lista para dar para IA do Banco Mango
+        const snap = await getDocs(query(collection(dbMango, 'content'), limit(300)));
         const simpleCat = [];
         snap.forEach(d => {
             const data = d.data();
             simpleCat.push({ id: d.id, title: data.title, gen: (data.genres||[]).join(',') });
         });
 
-        if(simpleCat.length === 0) return showToast("Seu catálogo está vazio.", true);
+        if(simpleCat.length === 0) return showToast("Seu catálogo do MANGO está vazio.", true);
         
         if(geminiKey) localStorage.setItem('mango_gemini_key', geminiKey); 
         if(groqKey) localStorage.setItem('mango_groq_key', groqKey); 
@@ -2097,8 +2083,6 @@ function initCarouselLogic() {
             const div = document.createElement('div');
             div.className = "p-4 bg-black/40 rounded-xl border border-pink-500/30 mb-3";
             
-            // Note: because catalogData is paginated, we might not have all items locally to show image
-            // We just render placeholder if not found in current memory
             const imagesHtml = c.items.map(itemId => {
                 const catItem = catalogData.find(x => x.id === itemId);
                 if(catItem) return `<img src="${catItem.poster}" class="w-10 h-14 object-cover rounded shadow border border-slate-700" title="${escapeHTML(catItem.title)}">`;
@@ -2142,12 +2126,12 @@ function initCarouselLogic() {
                     });
                 });
 
-                const oldDocs = await getDocs(query(collection(window.getDb(), 'carousels'), where('isAiGenerated', '==', true)));
-                const deletePromises = oldDocs.docs.map(d => deleteDoc(doc(window.getDb(), 'carousels', d.id)));
+                const oldDocs = await getDocs(query(collection(dbMango, 'carousels'), where('isAiGenerated', '==', true)));
+                const deletePromises = oldDocs.docs.map(d => deleteDoc(doc(dbMango, 'carousels', d.id)));
                 await Promise.all(deletePromises);
 
                 const savePromises = finalCarousels.map(c => {
-                    return addDoc(collection(window.getDb(), 'carousels'), {
+                    return addDoc(collection(dbMango, 'carousels'), {
                         title: c.title,
                         items: c.items,
                         isAiGenerated: true,
@@ -2169,12 +2153,12 @@ function initCarouselLogic() {
     }
 
     async function saveAllPendingCarouselsDirectly(carouselsArray) {
-        const oldDocs = await getDocs(query(collection(window.getDb(), 'carousels'), where('isAiGenerated', '==', true)));
-        const deletePromises = oldDocs.docs.map(d => deleteDoc(doc(window.getDb(), 'carousels', d.id)));
+        const oldDocs = await getDocs(query(collection(dbMango, 'carousels'), where('isAiGenerated', '==', true)));
+        const deletePromises = oldDocs.docs.map(d => deleteDoc(doc(dbMango, 'carousels', d.id)));
         await Promise.all(deletePromises);
 
         const savePromises = carouselsArray.map(c => {
-            return addDoc(collection(window.getDb(), 'carousels'), {
+            return addDoc(collection(dbMango, 'carousels'), {
                 title: c.title,
                 items: c.items,
                 isAiGenerated: true,
@@ -2182,19 +2166,20 @@ function initCarouselLogic() {
             });
         });
         await Promise.all(savePromises);
-        showToast(`A IA gerou ${carouselsArray.length} categorias com sucesso!`);
+        showToast(`A IA gerou ${carouselsArray.length} categorias com sucesso no MANGO!`);
     }
 }
 
 // ==========================================
-// LÓGICA DA ABA DE AVATARES DE PERFIL
+// LÓGICA DA ABA DE AVATARES DE PERFIL -> EXCLUSIVO MANGO
 // ==========================================
 function initAvatarLogic() {
     let currentAvatarUrls = [];
     let cropperInstance = null;
     let currentCropIndex = -1;
 
-    unsubAvatars = onSnapshot(collection(window.getDb(), 'avatar_groups'), (snapshot) => {
+    if(unsubAvatars) unsubAvatars();
+    unsubAvatars = onSnapshot(collection(dbMango, 'avatar_groups'), (snapshot) => {
         avatarGroupsData = [];
         snapshot.forEach(doc => avatarGroupsData.push({ id: doc.id, ...doc.data() }));
         renderSavedAvatarGroups();
@@ -2205,7 +2190,7 @@ function initAvatarLogic() {
         if(!list) return;
         list.innerHTML = '';
         if (avatarGroupsData.length === 0) {
-            list.innerHTML = '<p class="text-sm text-slate-400">Nenhum grupo de avatar salvo.</p>';
+            list.innerHTML = '<p class="text-sm text-slate-400">Nenhum grupo de avatar salvo no MANGO.</p>';
             return;
         }
         avatarGroupsData.forEach(group => {
@@ -2486,9 +2471,9 @@ function initAvatarLogic() {
 
     window.deleteAvatarGroup = function(id) {
         showConfirm('Apagar Grupo', 'Deseja apagar este grupo de avatares?', async () => {
-            await deleteDoc(doc(window.getDb(), 'avatar_groups', id));
+            await deleteDoc(doc(dbMango, 'avatar_groups', id));
             if (document.getElementById('avatar-group-id').value === id) window.clearAvatarEdit();
-            showToast('Grupo apagado!');
+            showToast('Grupo apagado do MANGO!');
         });
     };
 
@@ -2513,11 +2498,11 @@ function initAvatarLogic() {
             showButtonSpinner(saveAvatarBtn);
             try {
                 if (id) {
-                    await updateDoc(doc(window.getDb(), 'avatar_groups', id), { title: title, avatars: currentAvatarUrls, updatedAt: serverTimestamp() });
-                    showToast("Grupo Atualizado!");
+                    await updateDoc(doc(dbMango, 'avatar_groups', id), { title: title, avatars: currentAvatarUrls, updatedAt: serverTimestamp() });
+                    showToast("Grupo Atualizado no MANGO!");
                 } else {
-                    await addDoc(collection(window.getDb(), 'avatar_groups'), { title: title, avatars: currentAvatarUrls, createdAt: serverTimestamp() });
-                    showToast("Grupo Criado!");
+                    await addDoc(collection(dbMango, 'avatar_groups'), { title: title, avatars: currentAvatarUrls, createdAt: serverTimestamp() });
+                    showToast("Grupo Criado no MANGO!");
                 }
                 window.clearAvatarEdit();
             } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(saveAvatarBtn, 'Salvar Grupo de Avatares'); }
@@ -2526,11 +2511,12 @@ function initAvatarLogic() {
 }
 
 // ==========================================
-// LÓGICA DA ABA DE FUNDOS DE PERFIL E VERTICAIS
+// LÓGICA DA ABA DE FUNDOS DE PERFIL E VERTICAIS -> EXCLUSIVO MANGO
 // ==========================================
 function initBackgroundLogic() {
     let currentBgUrls = [];
-    unsubBgs = onSnapshot(collection(window.getDb(), 'background_groups'), (snapshot) => {
+    if(unsubBgs) unsubBgs();
+    unsubBgs = onSnapshot(collection(dbMango, 'background_groups'), (snapshot) => {
         backgroundGroupsData = [];
         snapshot.forEach(doc => backgroundGroupsData.push({ id: doc.id, ...doc.data() }));
         renderSavedBgGroups();
@@ -2541,7 +2527,7 @@ function initBackgroundLogic() {
         if(!list) return;
         list.innerHTML = '';
         if (backgroundGroupsData.length === 0) {
-            list.innerHTML = '<p class="text-sm text-slate-400">Nenhum grupo de fundo salvo.</p>';
+            list.innerHTML = '<p class="text-sm text-slate-400">Nenhum grupo de fundo salvo no MANGO.</p>';
             return;
         }
         backgroundGroupsData.forEach(group => {
@@ -2653,9 +2639,9 @@ function initBackgroundLogic() {
 
     window.deleteBgGroup = function(id) {
         showConfirm('Apagar Grupo', 'Deseja apagar este grupo de fundos?', async () => {
-            await deleteDoc(doc(window.getDb(), 'background_groups', id));
+            await deleteDoc(doc(dbMango, 'background_groups', id));
             if (document.getElementById('bg-group-id').value === id) window.clearBgEdit();
-            showToast('Grupo apagado!');
+            showToast('Grupo apagado do MANGO!');
         });
     };
 
@@ -2680,11 +2666,11 @@ function initBackgroundLogic() {
             showButtonSpinner(saveBgBtn);
             try {
                 if (id) {
-                    await updateDoc(doc(window.getDb(), 'background_groups', id), { title: title, backgrounds: currentBgUrls, updatedAt: serverTimestamp() });
-                    showToast("Grupo Atualizado!");
+                    await updateDoc(doc(dbMango, 'background_groups', id), { title: title, backgrounds: currentBgUrls, updatedAt: serverTimestamp() });
+                    showToast("Grupo Atualizado no MANGO!");
                 } else {
-                    await addDoc(collection(window.getDb(), 'background_groups'), { title: title, backgrounds: currentBgUrls, createdAt: serverTimestamp() });
-                    showToast("Grupo Criado!");
+                    await addDoc(collection(dbMango, 'background_groups'), { title: title, backgrounds: currentBgUrls, createdAt: serverTimestamp() });
+                    showToast("Grupo Criado no MANGO!");
                 }
                 window.clearBgEdit();
             } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(saveBgBtn, 'Salvar Grupo de Fundos'); }
@@ -2694,7 +2680,8 @@ function initBackgroundLogic() {
 
 function initVerticalBgLogic() {
     let currentVerticalUrls = [];
-    unsubVerticalBgs = onSnapshot(collection(window.getDb(), 'vertical_bg_groups'), (snapshot) => {
+    if(unsubVerticalBgs) unsubVerticalBgs();
+    unsubVerticalBgs = onSnapshot(collection(dbMango, 'vertical_bg_groups'), (snapshot) => {
         verticalGroupsData = [];
         snapshot.forEach(doc => verticalGroupsData.push({ id: doc.id, ...doc.data() }));
         renderSavedVerticalGroups();
@@ -2705,7 +2692,7 @@ function initVerticalBgLogic() {
         if(!list) return;
         list.innerHTML = '';
         if (verticalGroupsData.length === 0) {
-            list.innerHTML = '<p class="text-sm text-slate-400">Nenhum grupo salvo.</p>';
+            list.innerHTML = '<p class="text-sm text-slate-400">Nenhum grupo salvo no MANGO.</p>';
             return;
         }
         verticalGroupsData.forEach(group => {
@@ -2822,9 +2809,9 @@ function initVerticalBgLogic() {
 
     window.deleteVerticalGroup = function(id) {
         showConfirm('Apagar Grupo', 'Deseja apagar este grupo de fundos verticais?', async () => {
-            await deleteDoc(doc(window.getDb(), 'vertical_bg_groups', id));
+            await deleteDoc(doc(dbMango, 'vertical_bg_groups', id));
             if (document.getElementById('vertical-group-id').value === id) window.clearVerticalEdit();
-            showToast('Grupo apagado!');
+            showToast('Grupo apagado do MANGO!');
         });
     };
 
@@ -2849,11 +2836,11 @@ function initVerticalBgLogic() {
             showButtonSpinner(saveVerticalBtn);
             try {
                 if (id) {
-                    await updateDoc(doc(window.getDb(), 'vertical_bg_groups', id), { title: title, backgrounds: currentVerticalUrls, updatedAt: serverTimestamp() });
-                    showToast("Grupo Atualizado!");
+                    await updateDoc(doc(dbMango, 'vertical_bg_groups', id), { title: title, backgrounds: currentVerticalUrls, updatedAt: serverTimestamp() });
+                    showToast("Grupo Atualizado no MANGO!");
                 } else {
-                    await addDoc(collection(window.getDb(), 'vertical_bg_groups'), { title: title, backgrounds: currentVerticalUrls, createdAt: serverTimestamp() });
-                    showToast("Grupo Criado!");
+                    await addDoc(collection(dbMango, 'vertical_bg_groups'), { title: title, backgrounds: currentVerticalUrls, createdAt: serverTimestamp() });
+                    showToast("Grupo Criado no MANGO!");
                 }
                 window.clearVerticalEdit();
             } catch(e) { showToast("Erro ao salvar.", true); } finally { hideButtonSpinner(saveVerticalBtn, 'Salvar Grupo Vertical'); }
@@ -2862,7 +2849,7 @@ function initVerticalBgLogic() {
 }
 
 // ==========================================
-// LÓGICA DE ATUALIZAÇÃO DO APP (O CÉREBRO)
+// LÓGICA DE ATUALIZAÇÃO DO APP -> EXCLUSIVO MANGO
 // ==========================================
 function initUpdateLogic() {
     function compareVersions(v1, v2) {
@@ -2880,7 +2867,8 @@ function initUpdateLogic() {
 
     let updatesHistory = [];
 
-    unsubUpdates = onSnapshot(collection(window.getDb(), 'app_updates'), (snapshot) => {
+    if(unsubUpdates) unsubUpdates();
+    unsubUpdates = onSnapshot(collection(dbMango, 'app_updates'), (snapshot) => {
         updatesHistory = [];
         snapshot.forEach(doc => updatesHistory.push({ id: doc.id, ...doc.data() }));
         updatesHistory.sort((a, b) => compareVersions(b.version, a.version));
@@ -2892,7 +2880,7 @@ function initUpdateLogic() {
         if(!list) return;
         list.innerHTML = '';
         if (history.length === 0) {
-            list.innerHTML = '<p class="text-sm text-slate-400">Nenhuma atualização lançada ainda no BD ativo.</p>';
+            list.innerHTML = '<p class="text-sm text-slate-400">Nenhuma atualização lançada ainda no MANGO.</p>';
             return;
         }
         
@@ -2918,8 +2906,8 @@ function initUpdateLogic() {
     }
 
     window.deleteUpdate = function(id) {
-        showConfirm('Apagar Histórico', 'Deseja apagar este registro de atualização? (Se apagar a mais recente, os usuários pararão de receber o aviso).', async () => {
-            await deleteDoc(doc(window.getDb(), 'app_updates', id));
+        showConfirm('Apagar Histórico', 'Deseja apagar este registro de atualização no MANGO? (Se apagar a mais recente, os usuários pararão de receber o aviso).', async () => {
+            await deleteDoc(doc(dbMango, 'app_updates', id));
             showToast('Atualização apagada do histórico.');
         });
     };
@@ -2941,7 +2929,7 @@ function initUpdateLogic() {
 
             showButtonSpinner(saveUpdateBtn);
             try {
-                await addDoc(collection(window.getDb(), 'app_updates'), { 
+                await addDoc(collection(dbMango, 'app_updates'), { 
                     version: version, 
                     link: link, 
                     notes: notes,
@@ -2950,7 +2938,7 @@ function initUpdateLogic() {
                 
                 await window.sendPushNotification("all", "Temos uma Nova Atualização! 🚀", `A versão ${version} já está disponível para baixar no aplicativo.`);
 
-                showToast(`Versão ${version} publicada! Os apps vão detectar isso em breve.`);
+                showToast(`Versão ${version} publicada no MANGO! Os apps vão detectar isso em breve.`);
                 
                 document.getElementById('update-version').value = '';
                 document.getElementById('update-link').value = '';
@@ -2968,7 +2956,7 @@ function initUpdateLogic() {
 
 
 // ==========================================
-// LÓGICA DO RADAR DE ATUALIZAÇÕES E ATUALIZAÇÃO EM MASSA
+// LÓGICA DO RADAR DE ATUALIZAÇÕES E ATUALIZAÇÃO EM MASSA -> EXCLUSIVO MANGO
 // ==========================================
 window.startUpdateScan = async function() {
     const btn = document.getElementById('start-radar-btn');
@@ -2980,8 +2968,8 @@ window.startUpdateScan = async function() {
     progressText.classList.remove('hidden');
 
     try {
-        // Busca todos para não ser limitado pela paginação
-        const snap = await getDocs(query(collection(window.getDb(), 'content')));
+        // Busca todos para não ser limitado pela paginação, sempre no MANGO
+        const snap = await getDocs(query(collection(dbMango, 'content')));
         const allItems = [];
         snap.forEach(d => allItems.push({ id: d.id, ...d.data() }));
 
@@ -2989,7 +2977,7 @@ window.startUpdateScan = async function() {
         
         if (tvShows.length === 0) {
             hideButtonSpinner(btn, '📡 Escanear Novamente');
-            return showToast("Você não possui séries cadastradas no catálogo.", true);
+            return showToast("Você não possui séries cadastradas no catálogo do MANGO.", true);
         }
 
         let foundUpdates = 0;
@@ -3114,7 +3102,7 @@ window.startBulkAgeRatingUpdate = async function() {
     showButtonSpinner(btn);
 
     try {
-        const snap = await getDocs(query(collection(window.getDb(), 'content')));
+        const snap = await getDocs(query(collection(dbMango, 'content')));
         const allItems = [];
         snap.forEach(d => allItems.push({ id: d.id, ...d.data() }));
 
@@ -3122,7 +3110,7 @@ window.startBulkAgeRatingUpdate = async function() {
         
         if (missingItems.length === 0) {
             hideButtonSpinner(btn, '⚡ Iniciar Novamente');
-            return showToast("Parabéns! Todos os seus animes já possuem Classificação Indicativa no banco atual.", false);
+            return showToast("Parabéns! Todos os seus animes já possuem Classificação Indicativa no MANGO.", false);
         }
 
         showConfirm('Atualização em Massa', `Encontramos ${missingItems.length} animes sem classificação. Deseja buscar automaticamente no TMDB? O processo pode demorar alguns segundos.`, async () => {
@@ -3139,7 +3127,7 @@ window.startBulkAgeRatingUpdate = async function() {
                 try {
                     const rating = await fetchTmdbAgeRating(item.tmdb_id, item.type);
                     
-                    await updateDoc(doc(window.getDb(), 'content', item.id), { ageRating: rating });
+                    await updateDoc(doc(dbMango, 'content', item.id), { ageRating: rating });
                     successCount++;
 
                     const div = document.createElement('div');
@@ -3154,11 +3142,11 @@ window.startBulkAgeRatingUpdate = async function() {
                     `;
                     resultsDiv.prepend(div); 
                 } catch (e) {
-                    console.error("Erro ao atualizar o item", item.title, e);
+                    console.error("Erro ao atualizar o item no MANGO", item.title, e);
                 }
             }
 
-            progressText.textContent = `Varredura concluída! ${successCount} animes atualizados com sucesso.`;
+            progressText.textContent = `Varredura concluída! ${successCount} animes atualizados com sucesso no MANGO.`;
             hideButtonSpinner(btn, '⚡ Iniciar Novamente');
             window.initializeGlassEffects();
             showToast(`Processo finalizado! ${successCount} itens atualizados.`);
@@ -3177,7 +3165,7 @@ window.startBulkLogoUpdate = async function() {
     showButtonSpinner(btn);
 
     try {
-        const snap = await getDocs(query(collection(window.getDb(), 'content')));
+        const snap = await getDocs(query(collection(dbMango, 'content')));
         const allItems = [];
         snap.forEach(d => allItems.push({ id: d.id, ...d.data() }));
 
@@ -3185,10 +3173,10 @@ window.startBulkLogoUpdate = async function() {
         
         if (missingItems.length === 0) {
             hideButtonSpinner(btn, '✨ Buscar Logos Novamente');
-            return showToast("Parabéns! Todos os animes e filmes já possuem Logo (Clearlogo) no BD ativo.", false);
+            return showToast("Parabéns! Todos os animes e filmes já possuem Logo (Clearlogo) no MANGO.", false);
         }
 
-        showConfirm('Atualização em Massa', `Encontramos ${missingItems.length} obras sem logo no Banco de Dados. Deseja buscar e sincronizar automaticamente no TMDB? O processo pode demorar um pouco.`, async () => {
+        showConfirm('Atualização em Massa', `Encontramos ${missingItems.length} obras sem logo no Banco de Dados do MANGO. Deseja buscar e sincronizar automaticamente no TMDB? O processo pode demorar um pouco.`, async () => {
             resultsDiv.innerHTML = '';
             progressText.classList.remove('hidden');
             let successCount = 0;
@@ -3205,7 +3193,7 @@ window.startBulkLogoUpdate = async function() {
                     if (imgData && imgData.logos && imgData.logos.length > 0) {
                         const logoUrl = `https://image.tmdb.org/t/p/original${imgData.logos[0].file_path}`;
                         
-                        await updateDoc(doc(window.getDb(), 'content', item.id), { logo: logoUrl });
+                        await updateDoc(doc(dbMango, 'content', item.id), { logo: logoUrl });
                         successCount++;
 
                         const div = document.createElement('div');
@@ -3223,11 +3211,11 @@ window.startBulkLogoUpdate = async function() {
                         resultsDiv.prepend(div); 
                     }
                 } catch (e) {
-                    console.error("Erro ao atualizar o logo do item", item.title, e);
+                    console.error("Erro ao atualizar o logo do item no MANGO", item.title, e);
                 }
             }
 
-            progressText.textContent = `Varredura concluída! ${successCount} logos atualizados com sucesso.`;
+            progressText.textContent = `Varredura concluída! ${successCount} logos atualizados com sucesso no MANGO.`;
             hideButtonSpinner(btn, '✨ Buscar Logos Novamente');
             window.initializeGlassEffects();
             showToast(`Processo finalizado! ${successCount} novos logos sincronizados.`);
@@ -3239,10 +3227,11 @@ window.startBulkLogoUpdate = async function() {
 };
 
 // ==========================================
-// LÓGICA DE CONQUISTAS E INICIALIZAÇÃO GERAL
+// LÓGICA DE CONQUISTAS -> EXCLUSIVO MANGO
 // ==========================================
 function initAchievementsLogic() {
-    unsubAchievements = onSnapshot(collection(window.getDb(), 'achievements'), (snapshot) => {
+    if(unsubAchievements) unsubAchievements();
+    unsubAchievements = onSnapshot(collection(dbMango, 'achievements'), (snapshot) => {
         achievementsData = [];
         snapshot.forEach(doc => achievementsData.push({ id: doc.id, ...doc.data() }));
         renderAchievements();
@@ -3261,7 +3250,7 @@ function initAchievementsLogic() {
         if(!list) return;
         list.innerHTML = '';
         if (achievementsData.length === 0) {
-            list.innerHTML = '<p class="text-sm text-slate-400 col-span-full">Nenhuma conquista cadastrada.</p>';
+            list.innerHTML = '<p class="text-sm text-slate-400 col-span-full">Nenhuma conquista cadastrada no MANGO.</p>';
             return;
         }
 
@@ -3313,8 +3302,8 @@ function initAchievementsLogic() {
     };
 
     window.deleteAchievement = function(id) {
-        showConfirm('Apagar Conquista', 'Deseja excluir esta conquista?', async () => {
-            await deleteDoc(doc(window.getDb(), 'achievements', id));
+        showConfirm('Apagar Conquista', 'Deseja excluir esta conquista do MANGO?', async () => {
+            await deleteDoc(doc(dbMango, 'achievements', id));
             if(document.getElementById('achievement-id').value === id) window.clearAchievementEdit();
             showToast('Conquista apagada!');
         });
@@ -3360,12 +3349,12 @@ function initAchievementsLogic() {
                 };
 
                 if (id) {
-                    await updateDoc(doc(window.getDb(), 'achievements', id), data);
-                    showToast("Conquista Atualizada!");
+                    await updateDoc(doc(dbMango, 'achievements', id), data);
+                    showToast("Conquista Atualizada no MANGO!");
                 } else {
                     data.createdAt = serverTimestamp();
-                    await addDoc(collection(window.getDb(), 'achievements'), data);
-                    showToast("Conquista Criada!");
+                    await addDoc(collection(dbMango, 'achievements'), data);
+                    showToast("Conquista Criada no MANGO!");
                 }
                 window.clearAchievementEdit();
             } catch(e) { 
@@ -3439,7 +3428,7 @@ function initAchievementsLogic() {
 
                     const iconUrl = `https://placehold.co/200x200/${color}/ffffff?text=Lvl+${ach.difficultyLevel}&font=montserrat`;
                     
-                    return addDoc(collection(window.getDb(), 'achievements'), {
+                    return addDoc(collection(dbMango, 'achievements'), {
                         title: ach.title,
                         description: ach.description,
                         iconUrl: iconUrl,
@@ -3452,7 +3441,7 @@ function initAchievementsLogic() {
                 });
                 await Promise.all(savePromises);
 
-                showToast(`${newAchievements.length} conquistas geradas com sucesso pela IA!`);
+                showToast(`${newAchievements.length} conquistas geradas com sucesso pela IA no MANGO!`);
                 document.getElementById('ai-achievement-theme').value = '';
             } catch(e) { 
                 console.error(e);
@@ -3498,7 +3487,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             window.initializeGlassEffects();
             
-            // Inicia tudo apontando para o DB atual (Mango por padrão)
+            // Inicia os Listeners e lógicas
             listenForFeaturedItems();
             window.loadCatalog(false);
             initAddContentLogic(); 
