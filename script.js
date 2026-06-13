@@ -760,6 +760,8 @@ window.syncTmdbEpisodes = async function(listId, tmdbIdInputId) {
     if (!tmdbId) return showToast("TMDB ID não encontrado. Busque um anime primeiro.", true);
 
     const list = document.getElementById(listId);
+    if (!list) return showToast("Erro: Contêiner de temporadas não encontrado na página.", true);
+
     showToast("Sincronizando com TMDB... aguarde.", false);
     
     try {
@@ -818,7 +820,7 @@ window.syncTmdbEpisodes = async function(listId, tmdbIdInputId) {
 
                 const airDate = tmdbEp.air_date ? new Date(tmdbEp.air_date) : null;
                 const hasAired = airDate && airDate <= today;
-                const isGenericName = tmdbEp.name && (tmdbEp.name.toLowerCase().startsWith('episode') || ep.name.toLowerCase().startsWith('episódio') || ep.name.toLowerCase().startsWith('ep '));
+                const isGenericName = tmdbEp.name && (tmdbEp.name.toLowerCase().startsWith('episode') || tmdbEp.name.toLowerCase().startsWith('episódio') || tmdbEp.name.toLowerCase().startsWith('ep '));
                 const hasInfo = tmdbEp.still_path || (tmdbEp.overview && tmdbEp.overview.trim() !== '') || !isGenericName;
 
                 if (existingRowsMap.has(uniqueId)) {
