@@ -38,7 +38,7 @@ const dbStarlight = getFirestore(appStarlight);
 // Estado de Gerenciamento Atual (Alterne isso no HTML)
 window.currentManageSite = 'mango'; // 'mango' ou 'starlight'
 
-// Função auxiliar para retornar o banco de dados focado no momento (Para o Catálogo Geral)
+// Função auxiliar para retornar o banco de dados focado no momento
 window.getDb = () => window.currentManageSite === 'starlight' ? dbStarlight : dbMango;
 
 // ==========================================
@@ -178,7 +178,7 @@ async function fetchTmdbAgeRating(id, type) {
 }
 
 // ==========================================
-// SISTEMA DE TROCA DE SITE (APENAS PARA O CATÁLOGO GERAL)
+// SISTEMA DE TROCA DE SITE (MANGO / STARLIGHT)
 // ==========================================
 window.switchManageSite = function(siteId) {
     window.currentManageSite = siteId;
@@ -189,18 +189,34 @@ window.switchManageSite = function(siteId) {
         else btn.classList.remove('ring-2', 'ring-amber-500');
     });
 
-    showToast(`Painel Catálogo alterado para: ${siteId.toUpperCase()}`);
+    showToast(`Painel alterado para o banco de dados: ${siteId.toUpperCase()}`);
     
-    // Desinscreve ouvintes do catálogo geral
+    // Desinscreve ouvintes antigos
     if(unsubFeatured) unsubFeatured();
+    if(unsubCarousels) unsubCarousels();
+    if(unsubAvatars) unsubAvatars();
+    if(unsubBgs) unsubBgs();
+    if(unsubVerticalBgs) unsubVerticalBgs();
+    if(unsubRequests) unsubRequests();
+    if(unsubAchievements) unsubAchievements();
+    if(unsubUpdates) unsubUpdates();
 
-    // Recarrega Catálogo Principal e Destaques (Este é o único que muda de BD)
+    // Recarrega todos os ouvintes no novo BD
     listenForFeaturedItems();
+    initCarouselLogic(); 
+    initAvatarLogic();
+    initBackgroundLogic();
+    initVerticalBgLogic();
+    initRequestsLogic(); 
+    initAchievementsLogic();
+    initUpdateLogic();
+    
+    // Recarrega Catálogo
     window.loadCatalog(false);
 };
 
 // ==========================================
-// SISTEMA DE NOTIFICAÇÕES (IN-APP, PUSH E TELEGRAM) -> EXCLUSIVO MANGO
+// SISTEMA DE NOTIFICAÇÕES (IN-APP, PUSH E TELEGRAM)
 // ==========================================
 window.sendToTelegram = async function(title, synopsis, imageUrl, isUpdate = false) {
     if (!telegramConfig.active || !telegramConfig.botToken || !telegramConfig.channels) return;
@@ -361,7 +377,7 @@ function initNotificationsLogic() {
 }
 
 // ==========================================
-// SISTEMA DE VERIFICAÇÃO (SELO AZUL) -> EXCLUSIVO MANGO
+// SISTEMA DE VERIFICAÇÃO (SELO AZUL)
 // ==========================================
 function initVerifyLogic() {
     window.searchUserForVerification = async function() {
@@ -496,7 +512,7 @@ function initVerifyLogic() {
 }
 
 // ==========================================
-// SISTEMA DE PEDIDOS -> EXCLUSIVO MANGO
+// SISTEMA DE PEDIDOS
 // ==========================================
 function initRequestsLogic() {
     if(unsubRequests) unsubRequests();
@@ -590,7 +606,7 @@ window.updateRequestStatus = async function(id, status) {
             }
         }
     } catch (e) {
-        showToast("Erro ao atualizar status no MANGO.", true);
+        showToast("Erro ao atualizar status.", true);
     }
 };
 
@@ -611,7 +627,7 @@ window.goToAddFromRequest = function(tmdbId, mediaType) {
 };
 
 // ==========================================
-// SISTEMA DE IMAGENS DO TMDB (CATÁLOGO GERAL)
+// SISTEMA DE IMAGENS DO TMDB
 // ==========================================
 window.openTmdbImages = async function(mode) {
     const tmdbId = mode === 'add' ? document.getElementById('tmdb-id').value : document.getElementById('edit-tmdb-id').value;
@@ -678,7 +694,7 @@ window.openTmdbImages = async function(mode) {
 }
 
 // ==========================================
-// SISTEMA UNIFICADO DE TEMPORADAS E EPISÓDIOS (CATÁLOGO GERAL)
+// SISTEMA UNIFICADO DE TEMPORADAS E EPISÓDIOS
 // ==========================================
 function createEpisodeRow(episodeNumber, episodeName = '', episodeOverview = '', stillPath = '', isManual = false, existingUrl = '', existingAltUrl = '', isComingSoon = false, tmdbSeason = '', tmdbEp = '') {
     let displayUrl = 'https://placehold.co/120x67/1c1917/999999?text=EP';
@@ -1994,7 +2010,9 @@ function initCarouselLogic() {
 
             if (aiModel === 'gemini') {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: sysPrompt }] }] })
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ contents: [{ parts: [{ text: sysPrompt }] }] })
                 });
                 
                 if(!res.ok) {
@@ -3408,8 +3426,11 @@ function initAchievementsLogic() {
 
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: sysPrompt }] }] })
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: sysPrompt }] }] })
                 });
+                
                 if(!res.ok) throw new Error("Erro na requisição ao Gemini");
                 
                 const data = await res.json();
