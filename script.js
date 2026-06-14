@@ -1392,8 +1392,32 @@ function renderForm(data, mediaType, ageRating = '14') {
 }
 
 window.openEditPage = async (docId) => {
-    const item = catalogData.find(i => i.id === docId);
-    if (!item) return;
+    let item = catalogData.find(i => i.id === docId);
+
+    // --- CORREÇÃO DO RADAR E PEDIDOS ---
+    // Se o item não estiver na lista cacheada da paginação (catalogData), buscamos direto do banco de dados.
+    // Isso é vital para quando a edição for chamada por fora do catálogo, como no Radar.
+    if (!item) {
+        try {
+            let docSnap = await getDoc(doc(window.getDb(), 'content', docId));
+            
+            // O radar faz a busca direto no dbMango, então caso a janela ativa seja starlight e a obra não seja achada lá, tentamos no Mango
+            if (!docSnap.exists() && window.getDb() !== dbMango) {
+                docSnap = await getDoc(doc(dbMango, 'content', docId));
+            }
+            
+            if (docSnap.exists()) {
+                item = { id: docSnap.id, ...docSnap.data() };
+                catalogData.push(item); // Salva no cache local para facilitar leituras futuras
+            } else {
+                return showToast("Obra não encontrada no banco de dados.", true);
+            }
+        } catch (e) {
+            console.error("Erro ao buscar a obra:", e);
+            return showToast("Erro ao carregar os dados da obra.", true);
+        }
+    }
+    // -----------------------------------
 
     window.location.hash = 'editContentPage';
     document.getElementById('edit-title-header').textContent = `Editando no ${window.currentManageSite.toUpperCase()}`;
