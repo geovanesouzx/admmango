@@ -222,24 +222,34 @@ window.sendToTelegram = async function (title, synopsis, imageUrl, isUpdate = fa
     if (!telegramConfig.active || !telegramConfig.botToken || !telegramConfig.channels) return;
 
     const channels = telegramConfig.channels.split(',').map(c => c.trim());
+
+    // Pega os links configurados no painel
     const appLink = telegramConfig.appLink || 'https://linktr.ee/seuapp';
     const siteLink = telegramConfig.siteLink || 'https://seusite.com';
+
     const header = isUpdate ? "🔄 <b>NOVOS EPISÓDIOS DISPONÍVEIS!</b>" : "🎬 <b>NOVIDADE NO CATÁLOGO!</b>";
 
     let safeSynopsis = synopsis || "Sem sinopse disponível.";
     if (safeSynopsis.length > 500) safeSynopsis = safeSynopsis.substring(0, 497) + "...";
 
-    // Define qual link mostrar baseado na escolha
-    let linksText = "";
-    if (siteChoice === 'mango') {
-        linksText = `📱 <a href="${appLink}">👉 Baixe nosso app aqui e assista!</a>`;
-    } else if (siteChoice === 'starlight') {
-        linksText = `🌐 <a href="${siteLink}">👉 Assista agora no nosso site!</a>`;
-    } else {
-        linksText = `📱 <a href="${appLink}">👉 Baixe nosso app</a>\n🌐 <a href="${siteLink}">👉 Ou assista no site</a>`;
-    }
+    // A legenda agora fica mais limpa, sem os links de texto
+    const caption = `${header}\n\n🍿 <b>${title}</b>\n\n📖 <i>${safeSynopsis}</i>`;
 
-    const caption = `${header}\n\n🍿 <b>${title}</b>\n\n📖 <i>${safeSynopsis}</i>\n\n${linksText}`;
+    // ---------------------------------------------------------
+    // CRIAÇÃO DOS BOTÕES (INLINE KEYBOARD)
+    // Cada array dentro do array principal representa uma "linha" de botões
+    // ---------------------------------------------------------
+    let inlineKeyboard = [];
+
+    if (siteChoice === 'mango') {
+        if (appLink) inlineKeyboard.push([{ text: "📱 Baixar Aplicativo", url: appLink }]);
+    } else if (siteChoice === 'starlight') {
+        if (siteLink) inlineKeyboard.push([{ text: "🌐 Assistir no Site", url: siteLink }]);
+    } else {
+        // Se for "both", coloca um botão em cima do outro
+        if (appLink) inlineKeyboard.push([{ text: "📱 Baixar Aplicativo", url: appLink }]);
+        if (siteLink) inlineKeyboard.push([{ text: "🌐 Assistir no Site", url: siteLink }]);
+    }
 
     for (const chatId of channels) {
         if (!chatId) continue;
@@ -249,7 +259,11 @@ window.sendToTelegram = async function (title, synopsis, imageUrl, isUpdate = fa
                 chat_id: chatId,
                 photo: imageUrl,
                 caption: caption,
-                parse_mode: 'HTML'
+                parse_mode: 'HTML',
+                // Aqui enviamos os botões para o Telegram
+                reply_markup: {
+                    inline_keyboard: inlineKeyboard
+                }
             };
 
             await fetch(url, {
@@ -316,24 +330,24 @@ window.sendInAppNotification = async function (uidList, title, message) {
 function initNotificationsLogic() {
     getDoc(doc(dbMango, 'config', 'fcm')).then(docSnap => {
         if (docSnap.exists() && docSnap.data().webhookUrl) {
-            if(document.getElementById('notif-webhook-url')) document.getElementById('notif-webhook-url').value = docSnap.data().webhookUrl;
+            if (document.getElementById('notif-webhook-url')) document.getElementById('notif-webhook-url').value = docSnap.data().webhookUrl;
         }
     });
 
     getDoc(doc(dbMango, 'config', 'telegram')).then(docSnap => {
         if (docSnap.exists()) {
             telegramConfig = docSnap.data();
-            if(document.getElementById('tg-bot-token')) document.getElementById('tg-bot-token').value = telegramConfig.botToken || '';
-            if(document.getElementById('tg-channels')) document.getElementById('tg-channels').value = telegramConfig.channels || '';
-            if(document.getElementById('tg-app-link')) document.getElementById('tg-app-link').value = telegramConfig.appLink || '';
+            if (document.getElementById('tg-bot-token')) document.getElementById('tg-bot-token').value = telegramConfig.botToken || '';
+            if (document.getElementById('tg-channels')) document.getElementById('tg-channels').value = telegramConfig.channels || '';
+            if (document.getElementById('tg-app-link')) document.getElementById('tg-app-link').value = telegramConfig.appLink || '';
             // Novo campo do site adicionado aqui:
-            if(document.getElementById('tg-site-link')) document.getElementById('tg-site-link').value = telegramConfig.siteLink || '';
-            if(document.getElementById('tg-active')) document.getElementById('tg-active').checked = telegramConfig.active || false;
+            if (document.getElementById('tg-site-link')) document.getElementById('tg-site-link').value = telegramConfig.siteLink || '';
+            if (document.getElementById('tg-active')) document.getElementById('tg-active').checked = telegramConfig.active || false;
         }
     });
 
     const webHookForm = document.getElementById('webhook-form');
-    if(webHookForm) {
+    if (webHookForm) {
         webHookForm.onsubmit = async (e) => {
             e.preventDefault();
             const btn = document.getElementById('save-webhook-btn');
@@ -341,7 +355,7 @@ function initNotificationsLogic() {
             try {
                 await setDoc(doc(dbMango, 'config', 'fcm'), { webhookUrl: document.getElementById('notif-webhook-url').value }, { merge: true });
                 showToast("URL do Webhook atualizado com sucesso!");
-            } catch(err) {
+            } catch (err) {
                 showToast("Erro ao salvar Webhook.", true);
             }
             hideButtonSpinner(btn, 'Salvar Webhook');
@@ -349,7 +363,7 @@ function initNotificationsLogic() {
     }
 
     const tgForm = document.getElementById('telegram-form');
-    if(tgForm) {
+    if (tgForm) {
         tgForm.onsubmit = async (e) => {
             e.preventDefault();
             const btn = document.getElementById('save-telegram-btn');
@@ -369,10 +383,10 @@ function initNotificationsLogic() {
                     siteLink: siteLinkEl ? siteLinkEl.value.trim() : '',
                     active: activeEl ? activeEl.checked : false
                 };
-                
+
                 await setDoc(doc(dbMango, 'config', 'telegram'), telegramConfig, { merge: true });
                 showToast("Configurações do Telegram salvas!");
-            } catch(err) {
+            } catch (err) {
                 console.error("ERRO COMPLETO:", err);
                 showToast("Erro: " + err.message, true);
             }
@@ -387,7 +401,7 @@ function initNotificationsLogic() {
             const btn = document.getElementById('send-global-notif-btn');
             const title = document.getElementById('notif-title').value.trim();
             const body = document.getElementById('notif-body').value.trim();
-            
+
             showConfirm('Aviso Global', `Deseja enviar a notificação "${title}" para todos os aparelhos?`, async () => {
                 showButtonSpinner(btn);
                 await window.sendPushNotification("all", title, body);
