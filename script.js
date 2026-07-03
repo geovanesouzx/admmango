@@ -224,8 +224,8 @@ window.sendToTelegram = async function (title, synopsis, imageUrl, isUpdate = fa
     const channels = telegramConfig.channels.split(',').map(c => c.trim());
 
     // Pega os links configurados no painel
-    const appLink = telegramConfig.appLink || 'https://linktr.ee/seuapp';
-    const siteLink = telegramConfig.siteLink || 'https://seusite.com';
+    const appLink = telegramConfig.appLink || 'https://www.mediafire.com/file/4uxv6s5nqbrr9ob/mango_v6.8.apk/file';
+    const siteLink = telegramConfig.siteLink || 'https://www.starlightmax.com';
 
     const header = isUpdate ? "🔄 <b>NOVOS EPISÓDIOS DISPONÍVEIS!</b>" : "🎬 <b>NOVIDADE NO CATÁLOGO!</b>";
 
