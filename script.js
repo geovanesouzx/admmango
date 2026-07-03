@@ -354,22 +354,32 @@ function initNotificationsLogic() {
             const btn = document.getElementById('save-telegram-btn');
             showButtonSpinner(btn);
             try {
+                // Pegando os elementos primeiro com segurança
+                const botTokenEl = document.getElementById('tg-bot-token');
+                const channelsEl = document.getElementById('tg-channels');
+                const appLinkEl = document.getElementById('tg-app-link');
+                const siteLinkEl = document.getElementById('tg-site-link');
+                const activeEl = document.getElementById('tg-active');
+
+                // Montando o objeto protegendo contra valores nulos
                 telegramConfig = {
-                    botToken: document.getElementById('tg-bot-token').value.trim(),
-                    channels: document.getElementById('tg-channels').value.trim(),
-                    appLink: document.getElementById('tg-app-link').value.trim(),
-                    siteLink: document.getElementById('tg-site-link') ? document.getElementById('tg-site-link').value.trim() : '',
-                    active: document.getElementById('tg-active').checked
+                    botToken: botTokenEl ? botTokenEl.value.trim() : '',
+                    channels: channelsEl ? channelsEl.value.trim() : '',
+                    appLink: appLinkEl ? appLinkEl.value.trim() : '',
+                    siteLink: siteLinkEl ? siteLinkEl.value.trim() : '',
+                    active: activeEl ? activeEl.checked : false
                 };
+
                 await setDoc(doc(dbMango, 'config', 'telegram'), telegramConfig, { merge: true });
                 showToast("Configurações do Telegram salvas!");
             } catch (err) {
-                showToast("Erro ao salvar Telegram.", true);
+                console.error("ERRO COMPLETO AO SALVAR TELEGRAM:", err);
+                // Agora o toast vai mostrar o motivo exato do erro
+                showToast("Erro: " + err.message, true);
             }
             hideButtonSpinner(btn, 'Salvar Telegram');
         };
     }
-
     const globalNotifForm = document.getElementById('global-notif-form');
     if (globalNotifForm) {
         globalNotifForm.onsubmit = async (e) => {
