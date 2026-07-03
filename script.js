@@ -316,23 +316,24 @@ window.sendInAppNotification = async function (uidList, title, message) {
 function initNotificationsLogic() {
     getDoc(doc(dbMango, 'config', 'fcm')).then(docSnap => {
         if (docSnap.exists() && docSnap.data().webhookUrl) {
-            if (document.getElementById('notif-webhook-url')) document.getElementById('notif-webhook-url').value = docSnap.data().webhookUrl;
+            if(document.getElementById('notif-webhook-url')) document.getElementById('notif-webhook-url').value = docSnap.data().webhookUrl;
         }
     });
 
     getDoc(doc(dbMango, 'config', 'telegram')).then(docSnap => {
         if (docSnap.exists()) {
             telegramConfig = docSnap.data();
-            if (document.getElementById('tg-bot-token')) document.getElementById('tg-bot-token').value = telegramConfig.botToken || '';
-            if (document.getElementById('tg-channels')) document.getElementById('tg-channels').value = telegramConfig.channels || '';
-            if (document.getElementById('tg-app-link')) document.getElementById('tg-app-link').value = telegramConfig.appLink || '';
-            if (document.getElementById('tg-site-link')) document.getElementById('tg-site-link').value = telegramConfig.siteLink || '';
-            if (document.getElementById('tg-active')) document.getElementById('tg-active').checked = telegramConfig.active || false;
+            if(document.getElementById('tg-bot-token')) document.getElementById('tg-bot-token').value = telegramConfig.botToken || '';
+            if(document.getElementById('tg-channels')) document.getElementById('tg-channels').value = telegramConfig.channels || '';
+            if(document.getElementById('tg-app-link')) document.getElementById('tg-app-link').value = telegramConfig.appLink || '';
+            // Novo campo do site adicionado aqui:
+            if(document.getElementById('tg-site-link')) document.getElementById('tg-site-link').value = telegramConfig.siteLink || '';
+            if(document.getElementById('tg-active')) document.getElementById('tg-active').checked = telegramConfig.active || false;
         }
     });
 
     const webHookForm = document.getElementById('webhook-form');
-    if (webHookForm) {
+    if(webHookForm) {
         webHookForm.onsubmit = async (e) => {
             e.preventDefault();
             const btn = document.getElementById('save-webhook-btn');
@@ -340,7 +341,7 @@ function initNotificationsLogic() {
             try {
                 await setDoc(doc(dbMango, 'config', 'fcm'), { webhookUrl: document.getElementById('notif-webhook-url').value }, { merge: true });
                 showToast("URL do Webhook atualizado com sucesso!");
-            } catch (err) {
+            } catch(err) {
                 showToast("Erro ao salvar Webhook.", true);
             }
             hideButtonSpinner(btn, 'Salvar Webhook');
@@ -348,20 +349,19 @@ function initNotificationsLogic() {
     }
 
     const tgForm = document.getElementById('telegram-form');
-    if (tgForm) {
+    if(tgForm) {
         tgForm.onsubmit = async (e) => {
             e.preventDefault();
             const btn = document.getElementById('save-telegram-btn');
             showButtonSpinner(btn);
             try {
-                // Pegando os elementos primeiro com segurança
+                // Pegando os campos com segurança
                 const botTokenEl = document.getElementById('tg-bot-token');
                 const channelsEl = document.getElementById('tg-channels');
                 const appLinkEl = document.getElementById('tg-app-link');
                 const siteLinkEl = document.getElementById('tg-site-link');
                 const activeEl = document.getElementById('tg-active');
 
-                // Montando o objeto protegendo contra valores nulos
                 telegramConfig = {
                     botToken: botTokenEl ? botTokenEl.value.trim() : '',
                     channels: channelsEl ? channelsEl.value.trim() : '',
@@ -369,17 +369,17 @@ function initNotificationsLogic() {
                     siteLink: siteLinkEl ? siteLinkEl.value.trim() : '',
                     active: activeEl ? activeEl.checked : false
                 };
-
+                
                 await setDoc(doc(dbMango, 'config', 'telegram'), telegramConfig, { merge: true });
                 showToast("Configurações do Telegram salvas!");
-            } catch (err) {
-                console.error("ERRO COMPLETO AO SALVAR TELEGRAM:", err);
-                // Agora o toast vai mostrar o motivo exato do erro
+            } catch(err) {
+                console.error("ERRO COMPLETO:", err);
                 showToast("Erro: " + err.message, true);
             }
             hideButtonSpinner(btn, 'Salvar Telegram');
         };
     }
+
     const globalNotifForm = document.getElementById('global-notif-form');
     if (globalNotifForm) {
         globalNotifForm.onsubmit = async (e) => {
@@ -387,7 +387,7 @@ function initNotificationsLogic() {
             const btn = document.getElementById('send-global-notif-btn');
             const title = document.getElementById('notif-title').value.trim();
             const body = document.getElementById('notif-body').value.trim();
-
+            
             showConfirm('Aviso Global', `Deseja enviar a notificação "${title}" para todos os aparelhos?`, async () => {
                 showButtonSpinner(btn);
                 await window.sendPushNotification("all", title, body);
