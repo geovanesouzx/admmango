@@ -1318,6 +1318,7 @@ window.deleteContent = function (id, title) {
 // ADICIONAR / EDITAR LÓGICA DO CATÁLOGO
 // ==========================================
 function initAddContentLogic() {
+    // 1. Lógica do botão de buscar no TMDB
     document.getElementById('search-tmdb-btn').onclick = async () => {
         const q = document.getElementById('search-query').value.trim();
         if (!q) return;
@@ -1343,7 +1344,78 @@ function initAddContentLogic() {
             });
         }
     };
+
+    // 2. Lógica do botão de adicionar manualmente
+    document.getElementById('manual-add-btn').onclick = () => {
+        document.getElementById('search-results').innerHTML = '';
+        document.getElementById('details-form-container').classList.remove('hidden');
+
+        // Texto de aviso no topo
+        document.getElementById('tmdb-details').innerHTML = `
+        <div class="flex-1">
+            <h2 class="text-3xl font-black text-blue-400">Adição Manual</h2>
+            <p class="text-slate-300 text-sm">Preencha todos os dados. Botões de sincronizar com TMDB não funcionarão neste modo.</p>
+        </div>`;
+
+        document.getElementById('content-form').reset();
+
+        // Gerar um ID falso para substituir o ID do TMDB
+        document.getElementById('tmdb-id').value = 'manual_' + Date.now();
+        document.getElementById('media-type').value = 'tv';
+
+        const manualTypeSelector = document.getElementById('manual-type-selector');
+        if (manualTypeSelector) manualTypeSelector.classList.remove('hidden');
+        
+        tmdbData = null; // Limpa os dados do TMDB
+
+        changeManualType(); // Renderiza a interface inicial (Série)
+    };
 }
+
+// Funções Globais da Adição Manual
+window.changeManualType = function () {
+    const type = document.getElementById('manual-media-type').value;
+    document.getElementById('media-type').value = type;
+
+    const selArea = document.getElementById('seasons-selector-area');
+    const addGlobalToolbar = document.getElementById('add-global-toolbar');
+    document.getElementById('url-container').innerHTML = '';
+    document.getElementById('seasons-list').innerHTML = '';
+    document.getElementById('season-pills-container').innerHTML = '';
+
+    selArea.classList.add('hidden');
+    selArea.classList.remove('flex');
+    addGlobalToolbar.classList.add('hidden');
+    addGlobalToolbar.classList.remove('flex');
+
+    if (type === 'movie') {
+        document.getElementById('url-container').innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><label class="block text-sm font-bold text-amber-500 mb-2">URL do Filme (Padrão/Dub)</label><input type="url" id="movie-url" class="w-full p-4 glass-input rounded-xl text-lg missing-link"></div>
+            <div><label class="block text-sm font-bold text-indigo-400 mb-2">URL do Filme (Alternativo/Leg)</label><input type="url" id="movie-alt-url" class="w-full p-4 glass-input border-indigo-500/50 rounded-xl text-lg" placeholder="Opcional..."></div>
+        </div>`;
+        const mUrl = document.getElementById('movie-url');
+        const mAltUrl = document.getElementById('movie-alt-url');
+        const updateMovieLinks = () => { mUrl.classList.toggle('missing-link', !mUrl.value.trim() && !mAltUrl.value.trim()); };
+        mUrl.oninput = updateMovieLinks; mAltUrl.oninput = updateMovieLinks;
+    } else {
+        document.getElementById('url-container').innerHTML = `
+        <button type="button" onclick="addManualSeason()" class="glass-button w-full rounded-xl py-3 mb-4" style="--bg-color: rgba(16, 185, 129, 0.6);">
+            <div class="glass-filter"></div><div class="glass-overlay"></div><div class="glass-specular"></div>
+            <div class="glass-content text-white font-bold">+ Adicionar Temporada Manual</div>
+        </button>`;
+    }
+};
+
+window.addManualSeason = function () {
+    const list = document.getElementById('seasons-list');
+    const groups = list.querySelectorAll('.season-group');
+    const sNum = groups.length + 1;
+    const fakeTmdbId = document.getElementById('tmdb-id').value;
+    const group = createSeasonGroupElement(sNum, `Temporada ${sNum}`, 'seasons-list', fakeTmdbId, sNum);
+    list.appendChild(group);
+    window.initializeGlassEffects();
+};
 
 window.selectItem = async (id, type) => {
     document.getElementById('search-results').innerHTML = '';
@@ -1379,6 +1451,16 @@ function renderForm(data, mediaType, ageRating = '14') {
     document.getElementById('custom-poster').value = data.poster_path ? `${TMDB_IMG_URL}${data.poster_path}` : '';
     document.getElementById('custom-backdrop').value = data.backdrop_path ? `https://image.tmdb.org/t/p/original${data.backdrop_path}` : '';
 
+    // Preenche a sinopse e o ano automaticamente para permitir edição manual
+    const synInput = document.getElementById('add-synopsis');
+    if (synInput) synInput.value = data.overview || '';
+    
+    const yearInput = document.getElementById('add-year');
+    if (yearInput) yearInput.value = (data.first_air_date || data.release_date || '').substring(0, 4);
+
+    const manualTypeSelector = document.getElementById('manual-type-selector');
+    if (manualTypeSelector) manualTypeSelector.classList.add('hidden');
+
     let logoUrl = '';
     if (data.images && data.images.logos && data.images.logos.length > 0) {
         logoUrl = `https://image.tmdb.org/t/p/original${data.images.logos[0].file_path}`;
@@ -1392,7 +1474,10 @@ function renderForm(data, mediaType, ageRating = '14') {
     const selArea = document.getElementById('seasons-selector-area');
     const addGlobalToolbar = document.getElementById('add-global-toolbar');
 
-    document.getElementById('url-container').innerHTML = ''; document.getElementById('seasons-list').innerHTML = ''; document.getElementById('season-pills-container').innerHTML = '';
+    document.getElementById('url-container').innerHTML = ''; 
+    document.getElementById('seasons-list').innerHTML = ''; 
+    document.getElementById('season-pills-container').innerHTML = '';
+    
     selArea.classList.add('hidden'); selArea.classList.remove('flex');
     addGlobalToolbar.classList.add('hidden'); addGlobalToolbar.classList.remove('flex');
 
@@ -1431,21 +1516,16 @@ function renderForm(data, mediaType, ageRating = '14') {
 window.openEditPage = async (docId) => {
     let item = catalogData.find(i => i.id === docId);
 
-    // --- CORREÇÃO DO RADAR E PEDIDOS ---
-    // Se o item não estiver na lista cacheada da paginação (catalogData), buscamos direto do banco de dados.
-    // Isso é vital para quando a edição for chamada por fora do catálogo, como no Radar.
     if (!item) {
         try {
             let docSnap = await getDoc(doc(window.getDb(), 'content', docId));
-
-            // O radar faz a busca direto no dbMango, então caso a janela ativa seja starlight e a obra não seja achada lá, tentamos no Mango
             if (!docSnap.exists() && window.getDb() !== dbMango) {
                 docSnap = await getDoc(doc(dbMango, 'content', docId));
             }
 
             if (docSnap.exists()) {
                 item = { id: docSnap.id, ...docSnap.data() };
-                catalogData.push(item); // Salva no cache local para facilitar leituras futuras
+                catalogData.push(item);
             } else {
                 return showToast("Obra não encontrada no banco de dados.", true);
             }
@@ -1454,7 +1534,6 @@ window.openEditPage = async (docId) => {
             return showToast("Erro ao carregar os dados da obra.", true);
         }
     }
-    // -----------------------------------
 
     window.location.hash = 'editContentPage';
     document.getElementById('edit-title-header').textContent = `Editando no ${window.currentManageSite.toUpperCase()}`;
@@ -1506,9 +1585,6 @@ window.openEditPage = async (docId) => {
         document.getElementById('edit-custom-logo').value = item.logo || '';
     }
 
-    // ==============================================================
-    // INSERE O SELETOR DE ONDE SALVAR A EDIÇÃO (MANGO, STARLIGHT, AMBOS)
-    // ==============================================================
     const editForm = document.getElementById('edit-form');
     if (!document.getElementById('target-site-edit-wrapper') && editForm) {
         const saveBtn = document.getElementById('edit-save-btn');
@@ -1528,9 +1604,8 @@ window.openEditPage = async (docId) => {
             saveBtn.parentNode.insertBefore(wrapper, saveBtn);
         }
     } else if (document.getElementById('target-site-edit')) {
-        document.getElementById('target-site-edit').value = 'both'; // Volta para o padrão
+        document.getElementById('target-site-edit').value = 'both';
     }
-    // ==============================================================
 
     const urlContainer = document.getElementById('edit-url-container');
     const list = document.getElementById('edit-seasons-list');
@@ -1609,11 +1684,16 @@ window.openEditPage = async (docId) => {
 
 // Salvar Adição (Multi-DB)
 document.getElementById('content-form').onsubmit = async (e) => {
-    e.preventDefault(); const btn = document.getElementById('save-btn'); showButtonSpinner(btn);
+    e.preventDefault(); 
+    const btn = document.getElementById('save-btn'); 
+    showButtonSpinner(btn);
+    
     const type = document.getElementById('media-type').value;
-
-    let docId = createSlug(tmdbData.name || tmdbData.title);
-    if (!docId || docId.trim() === '') docId = tmdbData.id.toString();
+    const titleVal = document.getElementById('add-main-title').value.trim();
+    
+    let docId = createSlug(titleVal);
+    let tmdbIdVal = document.getElementById('tmdb-id').value;
+    if (!docId || docId === '') docId = tmdbIdVal;
 
     const badgeExpInput = document.getElementById('add-badge-expiration');
     const badgeExpiration = (badgeExpInput && badgeExpInput.value) ? new Date(badgeExpInput.value + 'T23:59:59').getTime() : 0;
@@ -1621,16 +1701,16 @@ document.getElementById('content-form').onsubmit = async (e) => {
     const badgeTextEl = document.getElementById('add-badge-text');
 
     let contentData = {
-        title: document.getElementById('add-main-title').value.trim(),
+        title: titleVal,
         ageRating: document.getElementById('add-age-rating').value,
         type: type,
-        tmdb_id: tmdbData.id,
+        tmdb_id: tmdbIdVal,
         poster: document.getElementById('custom-poster').value,
         backdrop: document.getElementById('custom-backdrop').value,
         logo: document.getElementById('custom-logo') ? document.getElementById('custom-logo').value : '',
-        synopsis: tmdbData.overview || '',
-        year: (tmdbData.first_air_date || tmdbData.release_date || '').substring(0, 4),
-        genres: (tmdbData.genres || []).map(g => g.name),
+        synopsis: document.getElementById('add-synopsis') ? document.getElementById('add-synopsis').value.trim() : (tmdbData ? tmdbData.overview : ''),
+        year: document.getElementById('add-year') ? document.getElementById('add-year').value.trim() : ((tmdbData?.first_air_date || tmdbData?.release_date || '').substring(0, 4)),
+        genres: tmdbData ? (tmdbData.genres || []).map(g => g.name) : ['Adicionado Manualmente'], 
         badgeText: badgeTextEl ? badgeTextEl.value : '',
         badgeExpiration: badgeExpiration,
         addedAt: serverTimestamp(),
@@ -1693,7 +1773,10 @@ document.getElementById('content-form').onsubmit = async (e) => {
 
 // Salvar Edição
 document.getElementById('edit-form').onsubmit = async (e) => {
-    e.preventDefault(); const btn = document.getElementById('edit-save-btn'); showButtonSpinner(btn);
+    e.preventDefault(); 
+    const btn = document.getElementById('edit-save-btn'); 
+    showButtonSpinner(btn);
+    
     const docId = document.getElementById('edit-doc-id').value;
     const type = document.getElementById('edit-media-type').value;
 
@@ -1736,9 +1819,7 @@ document.getElementById('edit-form').onsubmit = async (e) => {
             p.seasons = sMap;
         }
 
-        // ==============================================================
-        // LÓGICA MULTI-SITE ATUALIZADA PARA O EDIT
-        // ==============================================================
+        // LÓGICA MULTI-SITE
         const targetSiteEditSelect = document.getElementById('target-site-edit');
         const siteChoice = targetSiteEditSelect ? targetSiteEditSelect.value : 'both';
         const dbsToSave = [];
@@ -1747,11 +1828,8 @@ document.getElementById('edit-form').onsubmit = async (e) => {
         if (siteChoice === 'starlight' || siteChoice === 'both') dbsToSave.push(dbStarlight);
 
         for (const targetDb of dbsToSave) {
-            // Usamos setDoc com merge: true. Assim, se o conteúdo não existir em um dos bancos,
-            // ele será criado automaticamente sem falhar, servindo como uma "transferência/update".
             await setDoc(doc(targetDb, 'content', docId), p, { merge: true });
         }
-        // ==============================================================
 
         if (document.getElementById('notify-edit') && document.getElementById('notify-edit').checked) {
             await window.sendPushNotification(`content_${docId}`, 'Tem novidade! 📺', `${p.title} acaba de receber uma atualização!`);
